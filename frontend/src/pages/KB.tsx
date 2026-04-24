@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
@@ -6,14 +6,17 @@ import type { KbArticle } from "../types";
 import { Card, CardBody } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-import { BookOpen, Search, Plus, ThumbsUp, Eye, Tag, Sparkles } from "lucide-react";
+import { BookOpen, Search, Plus, ThumbsUp, Eye, Tag, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { timeAgo, cn } from "../lib/utils";
+
+const PAGE_SIZE = 9;
 
 export default function KB() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const { data: articles, isLoading } = useQuery<KbArticle[]>({
     queryKey: ["kb", debouncedSearch, tag],
@@ -24,6 +27,12 @@ export default function KB() {
 
   // Extract all unique tags
   const allTags = [...new Set((articles ?? []).flatMap((a) => a.tags))].slice(0, 20);
+
+  const totalPages = Math.ceil((articles?.length ?? 0) / PAGE_SIZE);
+  const pagedArticles = useMemo(
+    () => (articles ?? []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [articles, page],
+  );
 
   return (
     <div className="p-5 space-y-4 animate-fade-in">
@@ -82,7 +91,7 @@ export default function KB() {
         </div>
       )}
 
-      {/* Articles grid */}
+      {/* Articles grid + pagination */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -101,7 +110,7 @@ export default function KB() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {articles?.map((article) => (
+          {pagedArticles.map((article) => (
             <Card
               key={article.id}
               hover
@@ -152,6 +161,43 @@ export default function KB() {
               </CardBody>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
+          <span>
+            Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, articles?.length ?? 0)} de {articles?.length ?? 0}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="p-1.5 rounded hover:bg-ops-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={cn(
+                  "w-7 h-7 rounded text-xs font-medium transition-colors",
+                  p === page ? "bg-accent text-white" : "hover:bg-ops-700 text-slate-400",
+                )}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="p-1.5 rounded hover:bg-ops-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

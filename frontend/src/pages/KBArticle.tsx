@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../lib/api";
@@ -14,11 +14,31 @@ import { formatDate, cn } from "../lib/utils";
 import { Breadcrumb } from "../components/ui/Breadcrumb";
 import toast from "react-hot-toast";
 
+function renderInline(text: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*|_[^_]+_|`[^`]+`)/g).map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**"))
+      return <strong key={i} className="font-semibold text-slate-100">{part.slice(2, -2)}</strong>;
+    if (part.startsWith("_") && part.endsWith("_"))
+      return <em key={i} className="italic text-slate-300">{part.slice(1, -1)}</em>;
+    if (part.startsWith("`") && part.endsWith("`"))
+      return <code key={i} className="px-1 py-0.5 rounded bg-ops-700 text-accent font-mono text-xs">{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
+
 export default function KBArticle() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [rated, setRated] = useState<"helpful" | "not" | null>(null);
+
+  const storageKey = `kb_rating_${id}`;
+  const [rated, setRated] = useState<"helpful" | "not" | null>(
+    () => localStorage.getItem(storageKey) as "helpful" | "not" | null,
+  );
+
+  useEffect(() => {
+    if (rated) localStorage.setItem(storageKey, rated);
+  }, [rated, storageKey]);
 
   const { data: article, isLoading } = useQuery<KbArticle>({
     queryKey: ["kb-article", id],
@@ -111,15 +131,33 @@ export default function KBArticle() {
           <hr className="border-ops-600" />
 
           {/* Content — rendered as markdown-like */}
-          <div className="prose-ops space-y-3 text-sm text-slate-300 leading-relaxed">
-            {article.content.split("\n").map((line, i) => {
-              if (line.startsWith("## ")) return <h2 key={i} className="text-base font-semibold text-slate-200 mt-4 mb-2">{line.slice(3)}</h2>;
-              if (line.startsWith("### ")) return <h3 key={i} className="text-sm font-semibold text-slate-300 mt-3 mb-1">{line.slice(4)}</h3>;
-              if (line.startsWith("```")) return <div key={i} className="h-0" />;
-              if (line.startsWith("- ")) return <p key={i} className="flex gap-2 text-slate-400"><span className="text-accent mt-1">•</span><span>{line.slice(2)}</span></p>;
-              if (!line.trim()) return <div key={i} className="h-2" />;
-              return <p key={i} className="text-slate-300">{line}</p>;
-            })}
+          <div className="prose-ops space-y-1.5 text-sm text-slate-300 leading-relaxed">
+            {(() => {
+              let inCode = false;
+              const codeLines: string[] = [];
+              const nodes: React.ReactNode[] = [];
+              const lines = article.content.split("\n");
+              lines.forEach((line, i) => {
+                if (line.startsWith("```")) {
+                  if (!inCode) { inCode = true; return; }
+                  inCode = false;
+                  nodes.push(
+                    <pre key={i} className="my-2 p-3 bg-ops-950 rounded-lg border border-ops-700 overflow-x-auto font-mono text-xs text-slate-300 whitespace-pre">
+                      {codeLines.join("\n")}
+                    </pre>
+                  );
+                  codeLines.length = 0;
+                  return;
+                }
+                if (inCode) { codeLines.push(line); return; }
+                if (line.startsWith("## ")) return nodes.push(<h2 key={i} className="text-base font-semibold text-slate-100 mt-4 mb-1">{renderInline(line.slice(3))}</h2>);
+                if (line.startsWith("### ")) return nodes.push(<h3 key={i} className="text-sm font-semibold text-slate-200 mt-3 mb-1">{renderInline(line.slice(4))}</h3>);
+                if (line.startsWith("- ")) return nodes.push(<p key={i} className="flex gap-2 text-slate-400"><span className="text-accent flex-shrink-0">•</span><span>{renderInline(line.slice(2))}</span></p>);
+                if (!line.trim()) return nodes.push(<div key={i} className="h-2" />);
+                nodes.push(<p key={i}>{renderInline(line)}</p>);
+              });
+              return nodes;
+            })()}
           </div>
 
           <hr className="border-ops-600" />

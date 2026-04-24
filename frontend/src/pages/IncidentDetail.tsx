@@ -11,7 +11,8 @@ import { Dialog } from "../components/ui/Dialog";
 import { SeverityDot } from "../components/ui/StatusDot";
 import {
   ArrowLeft, CheckSquare, Square, Clock,
-  User, Zap, BookOpen, X, Check, AlertCircle, UserPlus
+  User, Zap, BookOpen, X, Check, AlertCircle, UserPlus,
+  CheckCircle2, UserCheck, AlertTriangle as AlertIcon, Activity, Lock,
 } from "lucide-react";
 import { Breadcrumb } from "../components/ui/Breadcrumb";
 import {
@@ -269,13 +270,24 @@ export default function IncidentDetail() {
           <Card>
             <CardHeader><CardTitle>Timeline</CardTitle></CardHeader>
             <CardBody className="space-y-3 p-3">
-              {inc.comments?.map((c) => (
+              {inc.comments?.map((c) => {
+                const sysIcon = (() => {
+                  if (!c.isSystemMessage) return null;
+                  const t = c.content.toLowerCase();
+                  if (t.includes("cerr") || t.includes("resuel")) return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />;
+                  if (t.includes("asign")) return <UserCheck className="w-3.5 h-3.5 text-blue-400" />;
+                  if (t.includes("automatiz") || t.includes("ejecut")) return <Activity className="w-3.5 h-3.5 text-purple-400" />;
+                  if (t.includes("estado") || t.includes("status")) return <AlertIcon className="w-3.5 h-3.5 text-amber-400" />;
+                  if (t.includes("bloqueado") || t.includes("pendiente")) return <Lock className="w-3.5 h-3.5 text-slate-400" />;
+                  return null;
+                })();
+                return (
                 <div key={c.id} className={cn("flex gap-3", c.isSystemMessage && "opacity-70")}>
                   <div className={cn(
                     "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs",
                     c.isSystemMessage ? "bg-ops-700 text-slate-500" : "bg-accent/20 text-accent",
                   )}>
-                    {c.isSystemMessage ? "⚙" : (c.author?.displayName?.charAt(0) ?? "?")}
+                    {c.isSystemMessage ? (sysIcon ?? "⚙") : (c.author?.displayName?.charAt(0) ?? "?")}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -289,7 +301,8 @@ export default function IncidentDetail() {
                     </p>
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {!isClosed && (
                 <div className="flex gap-2 pt-2 border-t border-ops-700">
