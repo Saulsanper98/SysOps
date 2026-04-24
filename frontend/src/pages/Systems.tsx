@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Dialog } from "../components/ui/Dialog";
 import { api } from "../lib/api";
 import type { SystemStatusItem, SystemStatus } from "../types";
 import { Card, CardBody } from "../components/ui/Card";
@@ -77,7 +78,56 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-function SystemCard({ system }: { system: SystemStatusItem }) {
+function SystemDetailDialog({ system, onClose }: { system: SystemStatusItem; onClose: () => void }) {
+  const cpu = system.metrics?.cpu;
+  const memory = system.metrics?.memory;
+  const disk = system.metrics?.disk;
+  const cpuColor = (cpu ?? 0) > 90 ? "text-red-400" : (cpu ?? 0) > 70 ? "text-amber-400" : "text-emerald-400";
+  const memColor = (memory ?? 0) > 90 ? "text-red-400" : (memory ?? 0) > 70 ? "text-amber-400" : "text-emerald-400";
+  const diskColor = (disk ?? 0) > 90 ? "text-red-400" : (disk ?? 0) > 70 ? "text-amber-400" : "text-emerald-400";
+  const meta = system.metadata ?? {};
+
+  return (
+    <Dialog open title={system.name} onClose={onClose} size="md">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <TypeIcon type={system.type} />
+          <div>
+            <p className="text-xs text-slate-500 capitalize">{system.type}</p>
+            <Badge className={statusBadgeColor[system.status as SystemStatus]}>
+              {statusLabel[system.status as SystemStatus]}
+            </Badge>
+          </div>
+        </div>
+
+        {(cpu !== undefined || memory !== undefined || disk !== undefined) && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Métricas</p>
+            {cpu !== undefined && <MetricBar label="CPU" value={cpu} color={cpuColor} />}
+            {memory !== undefined && <MetricBar label="Memoria" value={memory} color={memColor} />}
+            {disk !== undefined && <MetricBar label="Disco" value={disk} color={diskColor} />}
+          </div>
+        )}
+
+        {Object.keys(meta).length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Detalles</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {Object.entries(meta).map(([k, v]) => (
+                <div key={k}>
+                  <p className="text-xs text-slate-600 capitalize">{k.replace(/([A-Z])/g, " $1").trim()}</p>
+                  <p className="text-xs text-slate-300 truncate font-mono">{String(v)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
+function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: () => void }) {
   const cpu = system.metrics?.cpu;
   const memory = system.metrics?.memory;
   const disk = system.metrics?.disk;
@@ -91,7 +141,7 @@ function SystemCard({ system }: { system: SystemStatusItem }) {
   const source = system.metadata?.source as string | undefined;
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
+    <Card hover onClick={onSelect} className="flex flex-col gap-3 p-4 cursor-pointer">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -123,7 +173,7 @@ function SystemCard({ system }: { system: SystemStatusItem }) {
         </div>
       )}
 
-      {/* Metadata */}
+      {/* Metadata badges */}
       {(powerState || image) && (
         <div className="flex flex-wrap gap-1.5">
           {powerState && (
@@ -146,6 +196,7 @@ export default function Systems() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [selectedSystem, setSelectedSystem] = useState<SystemStatusItem | null>(null);
 
   const { data: systems, isLoading, refetch, isFetching } = useQuery<SystemStatusItem[]>({
     queryKey: ["dashboard-systems"],
@@ -250,7 +301,7 @@ export default function Systems() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((sys) => (
-            <SystemCard key={sys.externalId} system={sys} />
+            <SystemCard key={sys.externalId} system={sys} onSelect={() => setSelectedSystem(sys)} />
           ))}
         </div>
       )}
@@ -259,6 +310,10 @@ export default function Systems() {
         <p className="text-xs text-slate-600 text-center">
           Mostrando {filtered.length} de {systems?.length ?? 0} sistemas
         </p>
+      )}
+
+      {selectedSystem && (
+        <SystemDetailDialog system={selectedSystem} onClose={() => setSelectedSystem(null)} />
       )}
     </div>
   );

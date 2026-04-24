@@ -100,11 +100,13 @@ export class VCenterConnector extends BaseConnector {
             : vm.power_state === "POWERED_OFF"
             ? "degradado"
             : "desconocido",
-        metrics: {
-          memory: vm.memory_size_MiB,
-          cpu: vm.cpu_count,
+        metrics: {},
+        metadata: {
+          powerState: vm.power_state,
+          source: "vcenter",
+          cpuCount: vm.cpu_count,
+          memorySizeMiB: vm.memory_size_MiB,
         },
-        metadata: { powerState: vm.power_state, source: "vcenter" },
       }));
     } catch (err: any) {
       logger.error({ err: err.message }, "vCenter getSystems failed");

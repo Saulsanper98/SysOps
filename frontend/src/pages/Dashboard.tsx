@@ -8,7 +8,7 @@ import { Button } from "../components/ui/Button";
 import {
   AlertTriangle, Server, CheckCircle, Activity,
   ArrowRight, RefreshCw, Database,
-  Globe, Box, HardDrive
+  Globe, Box, HardDrive, Clock,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -16,6 +16,16 @@ import {
   timeAgo, cn
 } from "../lib/utils";
 import type { Severity, SystemStatus } from "../types";
+
+interface AuditEvent {
+  id: string;
+  action: string;
+  entityType: string;
+  entityName?: string;
+  description: string;
+  createdAt: string;
+  user?: { displayName: string };
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -31,6 +41,13 @@ export default function Dashboard() {
   const { data: systems } = useQuery<SystemStatusItem[]>({
     queryKey: ["dashboard-systems"],
     queryFn: () => api.get("/dashboard/systems").then((r) => r.data),
+    refetchInterval: 120000,
+  });
+
+  const { data: recentActivity } = useQuery<{ data: AuditEvent[] }>({
+    queryKey: ["dashboard-activity"],
+    queryFn: () => api.get("/audit", { params: { limit: 6, page: 1 } }).then((r) => r.data),
+    staleTime: 60000,
     refetchInterval: 120000,
   });
 
@@ -224,6 +241,35 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
               {systems.map((sys) => (
                 <SystemChip key={sys.externalId} system={sys} />
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* ─── Recent Activity ─────────────────────────────────────── */}
+      {(recentActivity?.data?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Actividad Reciente</CardTitle>
+            <Button variant="ghost" size="xs" onClick={() => navigate("/audit")}>
+              Ver todo <ArrowRight className="w-3 h-3" />
+            </Button>
+          </CardHeader>
+          <CardBody className="p-0">
+            <div className="divide-y divide-ops-700/50">
+              {recentActivity!.data.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-ops-750 transition-colors">
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-300 truncate">{event.description}</p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-600">
+                      {event.user && <span>{event.user.displayName}</span>}
+                      <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{timeAgo(event.createdAt)}</span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-700 capitalize flex-shrink-0">{event.entityType}</span>
+                </div>
               ))}
             </div>
           </CardBody>
