@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, AlertCircle, User, Lock } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, User, Lock, Smartphone } from "lucide-react";
 import { api, apiError } from "../lib/api";
 import { useAuthStore } from "../store/useStore";
 import toast from "react-hot-toast";
@@ -26,20 +26,60 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // 2FA step
+  const [totpStep, setTotpStep] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const [tempToken, setTempToken] = useState("");
+  const [totpLoading, setTotpLoading] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const { data } = await api.post<{ token: string; user: UserType }>("/auth/login", form);
-      setAuth(data.user, data.token);
-      toast.success(`Bienvenido, ${data.user.displayName}`);
+      const { data } = await api.post<
+        | { token: string; user: UserType }
+        | { requires2fa: true; tempToken: string }
+      >("/auth/login", form);
+
+      if ("requires2fa" in data && data.requires2fa) {
+        setTempToken(data.tempToken);
+        setTotpStep(true);
+        return;
+      }
+
+      const { token, user } = data as { token: string; user: UserType };
+      setAuth(user, token);
+      toast.success(`Bienvenido, ${user.displayName}`);
       navigate("/");
     } catch (err) {
       setError(apiError(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTotpConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setTotpLoading(true);
+    try {
+      const { data } = await api.post<{ token: string; user: UserType }>("/auth/2fa/confirm", {
+        tempToken,
+        code: totpCode,
+      });
+      setAuth(data.user, data.token);
+      toast.success(`Bienvenido, ${data.user.displayName}`);
+      navigate("/");
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const handleEntraLogin = () => {
+    window.location.href = `${import.meta.env.VITE_API_URL ?? "/api"}/auth/entra/init`;
   };
 
   return (
@@ -100,28 +140,35 @@ export default function Login() {
           <div className="absolute top-0 left-8 right-8 h-px"
             style={{ background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.4), transparent)" }} />
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {/* ── 2FA step ─────────────────────────────────────────────── */}
+          {totpStep ? (
+            <form onSubmit={handleTotpConfirm} className="space-y-5">
+              <div className="flex flex-col items-center gap-2 py-2">
+                <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center">
+                  <Smartphone className="w-6 h-6 text-accent" />
+                </div>
+                <p className="text-sm font-semibold text-slate-200">Verificación en dos pasos</p>
+                <p className="text-xs text-slate-500 text-center">
+                  Introduce el código de 6 dígitos de tu app de autenticación
+                </p>
+              </div>
 
-            {/* Username */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
-                Usuario
-              </label>
-              <div className="relative group">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-accent transition-colors" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                  Código TOTP
+                </label>
                 <input
                   type="text"
-                  value={form.username}
-                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                  placeholder="nombre de usuario"
-                  autoComplete="username"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
                   autoFocus
                   required
-                  className="w-full pl-9 pr-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 rounded-lg transition-all outline-none"
-                  style={{
-                    background: "rgba(6,10,20,0.6)",
-                    border: "1px solid rgba(30,45,69,0.9)",
-                  }}
+                  className="w-full text-center px-3 py-3 text-xl font-mono tracking-[0.5em] text-slate-200 placeholder:text-slate-600 rounded-lg transition-all outline-none"
+                  style={{ background: "rgba(6,10,20,0.6)", border: "1px solid rgba(30,45,69,0.9)" }}
                   onFocus={e => {
                     e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)";
                     e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)";
@@ -132,118 +179,172 @@ export default function Login() {
                   }}
                 />
               </div>
-            </div>
 
-            {/* Password */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
-                Contraseña
-              </label>
-              <div className="relative group">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-accent transition-colors" />
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  required
-                  className="w-full pl-9 pr-10 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 rounded-lg transition-all outline-none"
-                  style={{
-                    background: "rgba(6,10,20,0.6)",
-                    border: "1px solid rgba(30,45,69,0.9)",
-                  }}
-                  onFocus={e => {
-                    e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)";
-                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)";
-                  }}
-                  onBlur={e => {
-                    e.currentTarget.style.borderColor = "rgba(30,45,69,0.9)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition-colors"
-                  tabIndex={-1}
-                >
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+              {error && (
+                <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg text-sm text-red-400"
+                  style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", animation: "shake .35s ease" } as React.CSSProperties}>
+                  <AlertCircle className="w-4 h-4 mt-px flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-            {/* Error */}
-            {error && (
-              <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg text-sm text-red-400"
-                style={{
-                  background: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.25)",
-                  animation: "shake .35s ease",
-                } as React.CSSProperties}>
-                <AlertCircle className="w-4 h-4 mt-px flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 mt-1"
-              style={{
-                background: loading
-                  ? "rgba(59,130,246,0.5)"
-                  : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-                color: "#fff",
-                boxShadow: loading ? "none" : "0 4px 15px rgba(59,130,246,0.3), 0 1px 3px rgba(0,0,0,0.3)",
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Autenticando…</>
-                : "Iniciar sesión"}
-            </button>
-
-          </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px" style={{ background: "rgba(30,45,69,0.8)" }} />
-            <span className="text-xs text-slate-600">acceso rápido</span>
-            <div className="flex-1 h-px" style={{ background: "rgba(30,45,69,0.8)" }} />
-          </div>
-
-          {/* Quick-fill buttons */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Admin",    user: "admin",    pass: "Admin1234!" },
-              { label: "Técnico",  user: "tecnico1", pass: "Tech1234!" },
-              { label: "Solo Ver", user: "readonly", pass: "Tech1234!" },
-            ].map(({ label, user, pass }) => (
               <button
-                key={user}
-                type="button"
-                onClick={() => setForm({ username: user, password: pass })}
-                className="py-1.5 rounded-lg text-xs font-medium transition-all"
+                type="submit"
+                disabled={totpLoading || totpCode.length !== 6}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2"
                 style={{
-                  background: "rgba(30,45,69,0.5)",
-                  border: "1px solid rgba(30,45,69,0.9)",
-                  color: "#64748b",
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLButtonElement).style.color = "#94a3b8";
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(59,130,246,0.3)";
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLButtonElement).style.color = "#64748b";
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(30,45,69,0.9)";
+                  background: totpLoading || totpCode.length !== 6 ? "rgba(59,130,246,0.4)" : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+                  color: "#fff",
+                  boxShadow: totpLoading ? "none" : "0 4px 15px rgba(59,130,246,0.3)",
                 }}
               >
-                {label}
+                {totpLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verificando…</> : "Verificar código"}
               </button>
-            ))}
-          </div>
+
+              <button
+                type="button"
+                onClick={() => { setTotpStep(false); setTotpCode(""); setError(""); }}
+                className="w-full py-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                ← Volver al login
+              </button>
+            </form>
+          ) : (
+            <>
+            <form onSubmit={handleSubmit} className="space-y-5">
+
+              {/* Username */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                  Usuario
+                </label>
+                <div className="relative group">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-accent transition-colors" />
+                  <input
+                    type="text"
+                    value={form.username}
+                    onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                    placeholder="nombre de usuario"
+                    autoComplete="username"
+                    autoFocus
+                    required
+                    className="w-full pl-9 pr-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 rounded-lg transition-all outline-none"
+                    style={{ background: "rgba(6,10,20,0.6)", border: "1px solid rgba(30,45,69,0.9)" }}
+                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)"; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = "rgba(30,45,69,0.9)"; e.currentTarget.style.boxShadow = "none"; }}
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                  Contraseña
+                </label>
+                <div className="relative group">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-accent transition-colors" />
+                  <input
+                    type={showPw ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    required
+                    className="w-full pl-9 pr-10 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 rounded-lg transition-all outline-none"
+                    style={{ background: "rgba(6,10,20,0.6)", border: "1px solid rgba(30,45,69,0.9)" }}
+                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)"; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = "rgba(30,45,69,0.9)"; e.currentTarget.style.boxShadow = "none"; }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg text-sm text-red-400"
+                  style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", animation: "shake .35s ease" } as React.CSSProperties}>
+                  <AlertCircle className="w-4 h-4 mt-px flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 mt-1"
+                style={{
+                  background: loading ? "rgba(59,130,246,0.5)" : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+                  color: "#fff",
+                  boxShadow: loading ? "none" : "0 4px 15px rgba(59,130,246,0.3), 0 1px 3px rgba(0,0,0,0.3)",
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Autenticando…</> : "Iniciar sesión"}
+              </button>
+
+            </form>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-5">
+              <div className="flex-1 h-px" style={{ background: "rgba(30,45,69,0.8)" }} />
+              <span className="text-xs text-slate-600">o continúa con</span>
+              <div className="flex-1 h-px" style={{ background: "rgba(30,45,69,0.8)" }} />
+            </div>
+
+            {/* Entra SSO */}
+            <button
+              type="button"
+              onClick={handleEntraLogin}
+              className="w-full py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all mb-4"
+              style={{
+                background: "rgba(30,45,69,0.4)",
+                border: "1px solid rgba(30,45,69,0.9)",
+                color: "#64748b",
+              }}
+              onMouseEnter={e => { (e.currentTarget).style.borderColor = "rgba(59,130,246,0.3)"; (e.currentTarget).style.color = "#94a3b8"; }}
+              onMouseLeave={e => { (e.currentTarget).style.borderColor = "rgba(30,45,69,0.9)"; (e.currentTarget).style.color = "#64748b"; }}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 21 21" fill="none"><rect x="0" y="0" width="10" height="10" fill="#F25022"/><rect x="11" y="0" width="10" height="10" fill="#7FBA00"/><rect x="0" y="11" width="10" height="10" fill="#00A4EF"/><rect x="11" y="11" width="10" height="10" fill="#FFB900"/></svg>
+              Continuar con Microsoft
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px" style={{ background: "rgba(30,45,69,0.8)" }} />
+              <span className="text-xs text-slate-600">acceso rápido</span>
+              <div className="flex-1 h-px" style={{ background: "rgba(30,45,69,0.8)" }} />
+            </div>
+
+            {/* Quick-fill buttons */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Admin",    user: "admin",    pass: "Admin1234!" },
+                { label: "Técnico",  user: "tecnico1", pass: "Tech1234!" },
+                { label: "Solo Ver", user: "readonly", pass: "Tech1234!" },
+              ].map(({ label, user, pass }) => (
+                <button
+                  key={user}
+                  type="button"
+                  onClick={() => setForm({ username: user, password: pass })}
+                  className="py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{ background: "rgba(30,45,69,0.5)", border: "1px solid rgba(30,45,69,0.9)", color: "#64748b" }}
+                  onMouseEnter={e => { (e.currentTarget).style.color = "#94a3b8"; (e.currentTarget).style.borderColor = "rgba(59,130,246,0.3)"; }}
+                  onMouseLeave={e => { (e.currentTarget).style.color = "#64748b"; (e.currentTarget).style.borderColor = "rgba(30,45,69,0.9)"; }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            </>
+          )}
 
         </div>
 

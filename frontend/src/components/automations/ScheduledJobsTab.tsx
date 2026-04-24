@@ -8,8 +8,7 @@ import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Input } from "../ui/Input";
 import {
-  Plus, Trash2, ToggleLeft, ToggleRight, AlertTriangle,
-  CheckCircle, XCircle, Clock
+  Plus, Trash2, ToggleLeft, ToggleRight, AlertTriangle, Clock
 } from "lucide-react";
 import { cn, timeAgo } from "../../lib/utils";
 import toast from "react-hot-toast";
@@ -74,7 +73,8 @@ export function ScheduledJobsTab() {
   });
 
   const toggleJob = useMutation({
-    mutationFn: (id: string) => api.patch(`/scheduled-jobs/${id}/toggle`),
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.patch(`/scheduled-jobs/${id}/toggle`, { enabled }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-jobs"] });
     },
@@ -130,7 +130,7 @@ export function ScheduledJobsTab() {
                         )}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {job.action.name} · <span className="font-mono">{job.cronExpression}</span>
+                        {job.actionName ?? "—"} · <span className="font-mono">{job.cronExpression}</span>
                       </p>
                       <div className="flex items-center gap-3 mt-0.5">
                         {job.lastRun && (
@@ -147,7 +147,7 @@ export function ScheduledJobsTab() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleJob.mutate(job.id)}
+                        onClick={() => toggleJob.mutate({ id: job.id, enabled: !job.enabled })}
                         className="flex items-center gap-1 text-xs transition-colors"
                         title={job.enabled ? "Desactivar" : "Activar"}
                       >
@@ -278,7 +278,3 @@ export function ScheduledJobsTab() {
   );
 }
 
-// Reuse these icons without importing to avoid duplication
-function _unused() {
-  return <><CheckCircle /><XCircle /></>;
-}

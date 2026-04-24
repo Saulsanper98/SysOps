@@ -13,6 +13,7 @@ interface TwoFactorStatus {
 
 interface SetupData {
   qrDataUrl: string;
+  uri: string;
   secret: string;
 }
 

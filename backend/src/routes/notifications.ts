@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db, schema } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { requireAuth } from "../auth/middleware";
 import { NotFoundError, ForbiddenError } from "../utils/errors";
 
@@ -25,7 +25,7 @@ export async function notificationRoutes(app: FastifyInstance) {
       .select()
       .from(schema.notifications)
       .where(and(...conditions))
-      .orderBy(schema.notifications.createdAt)
+      .orderBy(desc(schema.notifications.createdAt))
       .limit(query.limit)
       .offset(offset);
 

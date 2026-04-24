@@ -5,6 +5,7 @@ import {
   Bell, Info, AlertTriangle, CheckCircle, XCircle, ChevronRight,
 } from "lucide-react";
 import { api, apiError } from "../../lib/api";
+import { useAuthStore } from "../../store/useStore";
 import type { Notification } from "../../types";
 import { timeAgo, cn } from "../../lib/utils";
 import toast from "react-hot-toast";
@@ -16,13 +17,26 @@ function NotifIcon({ type }: { type: Notification["type"] }) {
   return <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
 }
 
+// Create / reuse a single WebSocket connection per app instance
+let _ws: WebSocket | null = null;
+function getOrCreateWs(token: string): WebSocket {
+  if (_ws && _ws.readyState <= 1) return _ws;
+  const proto = window.location.protocol === "https:" ? "wss" : "ws";
+  const host = window.location.hostname;
+  const port = import.meta.env.DEV ? "3002" : window.location.port;
+  _ws = new WebSocket(`${proto}://${host}:${port}/ws?token=${encodeURIComponent(token)}`);
+  (window as any).__sysops_ws = _ws;
+  return _ws;
+}
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { token } = useAuthStore();
 
-  const { data: countData } = useQuery<{ unread: number }>({
+  const { data: countData } = useQuery<{ unreadCount: number }>({
     queryKey: ["notifications-count"],
     queryFn: () => api.get("/notifications/count").then((r) => r.data),
     refetchInterval: 30000,
@@ -54,8 +68,11 @@ export function NotificationBell() {
     },
   });
 
-  // WebSocket listener
+  // WebSocket connection + listener
   useEffect(() => {
+    if (!token) return;
+    const ws = getOrCreateWs(token);
+
     const handleMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
@@ -65,13 +82,10 @@ export function NotificationBell() {
         }
       } catch {}
     };
-    // Try to attach to existing WS if available on window
-    const ws = (window as unknown as Record<string, unknown>).__sysops_ws as WebSocket | undefined;
-    if (ws) ws.addEventListener("message", handleMessage);
-    return () => {
-      if (ws) ws.removeEventListener("message", handleMessage);
-    };
-  }, [open, qc]);
+
+    ws.addEventListener("message", handleMessage);
+    return () => ws.removeEventListener("message", handleMessage);
+  }, [open, qc, token]);
 
   // Close on outside click
   useEffect(() => {
@@ -84,7 +98,7 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const unread = countData?.unread ?? 0;
+  const unread = countData?.unreadCount ?? 0;
 
   const handleNotifClick = (n: Notification) => {
     markRead.mutate(n.id);

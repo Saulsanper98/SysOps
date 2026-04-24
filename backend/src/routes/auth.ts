@@ -123,7 +123,7 @@ export async function authRoutes(app: FastifyInstance) {
     const uri = generateOtpauthUri(secret, user.username);
     const qrDataUrl = await generateQrDataUrl(uri);
 
-    return { qrDataUrl, uri };
+    return { qrDataUrl, uri, secret };
   });
 
   // POST /2fa/verify — verify TOTP code and mark as verified

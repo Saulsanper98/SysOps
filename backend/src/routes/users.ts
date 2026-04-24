@@ -113,7 +113,7 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   // PUT /:id — edit user (admin only)
-  app.put("/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
+  const handleUpdateUser = async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
     const body = z.object({
       displayName: z.string().min(1).optional(),
@@ -154,7 +154,9 @@ export async function userRoutes(app: FastifyInstance) {
     });
 
     return reply.send({ ok: true });
-  });
+  };
+  app.put("/:id", { preHandler: requireRole("admin") }, handleUpdateUser);
+  app.patch("/:id", { preHandler: requireRole("admin") }, handleUpdateUser);
 
   // PATCH /:id/active — activate/deactivate (admin only)
   app.patch("/:id/active", { preHandler: requireRole("admin") }, async (req, reply) => {

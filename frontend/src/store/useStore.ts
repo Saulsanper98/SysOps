@@ -35,8 +35,16 @@ interface ThemeState {
   toggleTheme: () => void;
 }
 
+const _initTheme = (): "dark" | "light" => {
+  const saved = (localStorage.getItem("sysops-theme") as "dark" | "light") ?? "dark";
+  // Apply on load so the class is present before first render
+  document.documentElement.classList.toggle("dark", saved === "dark");
+  document.documentElement.classList.toggle("light", saved === "light");
+  return saved;
+};
+
 export const useThemeStore = create<ThemeState>()((set) => ({
-  theme: (localStorage.getItem("sysops-theme") as "dark" | "light") ?? "dark",
+  theme: _initTheme(),
   toggleTheme: () =>
     set((s) => {
       const next = s.theme === "dark" ? "light" : "dark";

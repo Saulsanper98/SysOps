@@ -13,10 +13,6 @@ import { cn, timeAgo } from "../../lib/utils";
 import { useAuthStore } from "../../store/useStore";
 import toast from "react-hot-toast";
 
-interface UserWithActive extends User {
-  active?: boolean;
-}
-
 const roleColor: Record<UserRole, string> = {
   admin: "text-red-400 bg-red-500/10 border-red-500/30",
   tecnico: "text-blue-400 bg-blue-500/10 border-blue-500/30",
@@ -41,11 +37,11 @@ export default function UsersPage() {
   const qc = useQueryClient();
   const { user: currentUser } = useAuthStore();
   const [showNew, setShowNew] = useState(false);
-  const [editUser, setEditUser] = useState<UserWithActive | null>(null);
+  const [editUser, setEditUser] = useState<User | null>(null);
   const [tempPassword, setTempPassword] = useState<{ password: string; name: string } | null>(null);
   const [newUser, setNewUser] = useState(initialNewUser);
 
-  const { data: users, isLoading } = useQuery<UserWithActive[]>({
+  const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ["users"],
     queryFn: () => api.get("/users").then((r) => r.data),
   });
@@ -63,7 +59,7 @@ export default function UsersPage() {
 
   const updateUser = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<User> }) =>
-      api.patch(`/users/${id}`, data),
+      api.put(`/users/${id}`, data),
     onSuccess: () => {
       toast.success("Usuario actualizado");
       qc.invalidateQueries({ queryKey: ["users"] });
@@ -87,7 +83,7 @@ export default function UsersPage() {
       api.post(`/users/${id}/reset-password`).then((r) => r.data),
     onSuccess: (data, id) => {
       const u = users?.find((u) => u.id === id);
-      setTempPassword({ password: data.temporaryPassword, name: u?.displayName ?? "Usuario" });
+      setTempPassword({ password: data.tempPassword, name: u?.displayName ?? "Usuario" });
     },
     onError: (err) => toast.error(apiError(err)),
   });

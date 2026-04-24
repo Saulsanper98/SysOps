@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(pg_isready)",
+      "Bash(redis-cli ping *)",
+      "Bash(where psql *)",
+      "Bash(where redis-server *)",
+      "Read(//c/Program Files/**)",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('dotenv/config'\\)\")",
+      "Bash(npm run *)",
+      "Bash(psql --version)",
+      "Bash(powershell.exe -Command \"& { scoop list 2>&1 | Select-String -Pattern 'postgres|redis|pgcli' }\")",
+      "Bash(powershell.exe -Command ' *)",
+      "Bash(powershell.exe -Command 'Get-ChildItem $env:USERPROFILE\\\\scoop\\\\apps -Recurse -Filter '\\\\''psql.exe'\\\\'' | Select-Object -First 3 FullName')",
+      "Bash(powershell.exe -Command '& $env:USERPROFILE\\\\scoop\\\\apps\\\\postgresql\\\\18.3\\\\bin\\\\psql.exe -U postgres -l 2>&1')",
+      "Bash(powershell.exe -Command 'Get-ChildItem $env:USERPROFILE\\\\scoop\\\\apps\\\\postgresql\\\\18.3 -Recurse -Filter '\\\\''pg_hba.conf'\\\\'' | Select-Object FullName')",
+      "Bash(powershell.exe -Command 'Get-ChildItem $env:USERPROFILE\\\\scoop -Recurse -Filter '\\\\''pg_hba.conf'\\\\'' | Select-Object FullName')",
+      "Bash(powershell.exe -Command \"Get-ChildItem C:\\\\Users\\\\TécnicoSistemas\\\\scoop -Recurse -Filter 'pg_hba.conf' 2>&1 | Select-Object FullName\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(powershell.exe -Command 'Get-ChildItem '\\\\''C:\\\\Users\\\\TécnicoSistemas\\\\scoop\\\\apps\\\\postgresql\\\\18.3'\\\\'' -Recurse -Filter '\\\\''pg_hba.conf'\\\\'' | ForEach-Object { $_.FullName }')",
+      "Bash(powershell.exe -Command \"Get-Service -Name postgresql* 2>&1 | Format-Table Name, Status, DisplayName -Auto\")",
+      "Bash(powershell.exe -Command \"Restart-Service -Name 'postgresql-x64-18'; Start-Sleep 2; \\(Get-Service 'postgresql-x64-18'\\).Status\")",
+      "Bash(powershell.exe -Command \"& 'C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\pg_ctl.exe' reload -D 'C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\data' 2>&1\")",
+      "Bash(powershell.exe -Command \"& 'C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe' -U postgres -p 5432 -h 127.0.0.1 -c '\\\\l' 2>&1\")",
+      "Bash(node -e ' *)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(curl -s -X POST http://192.168.12.39/zabbix/api_jsonrpc.php -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"user.login\",\"params\":{\"username\":\"Admin\",\"password\":\"@Autgc2025Tic\"},\"id\":1}')",
+      "Bash(curl -s -X POST http://192.168.12.39/zabbix/api_jsonrpc.php -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"problem.get\",\"params\":{\"output\":[\"eventid\",\"name\",\"severity\",\"clock\"],\"sortfield\":[\"severity\"],\"sortorder\":\"DESC\",\"limit\":5},\"auth\":\"d6825dafeb62a38511fd5f982e6c8324\",\"id\":2}')",
+      "Bash(curl -s -X POST http://192.168.12.39/zabbix/api_jsonrpc.php -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"apiinfo.version\",\"params\":{},\"id\":1}')",
+      "Bash(curl -s -X POST http://192.168.12.39/zabbix/api_jsonrpc.php -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"problem.get\",\"params\":{\"output\":[\"eventid\",\"name\",\"severity\",\"clock\",\"acknowledged\"],\"selectHosts\":[\"host\",\"name\"],\"sortfield\":[\"eventid\"],\"sortorder\":\"DESC\",\"limit\":5},\"auth\":\"d6825dafeb62a38511fd5f982e6c8324\",\"id\":2}')",
+      "Bash(curl -s -X POST http://192.168.12.39/zabbix/api_jsonrpc.php -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"problem.get\",\"params\":{\"output\":[\"eventid\",\"name\",\"severity\",\"clock\",\"acknowledged\",\"objectid\"],\"sortfield\":[\"eventid\"],\"sortorder\":\"DESC\",\"limit\":3},\"auth\":\"d6825dafeb62a38511fd5f982e6c8324\",\"id\":2}')",
+      "Bash(where claude *)"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+﻿CREATE USER sysops WITH PASSWORD '"sysops_pass"' CREATEDB;

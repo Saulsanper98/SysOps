@@ -80,8 +80,8 @@ export async function sshCredentialRoutes(app: FastifyInstance) {
     return reply.status(201).send(cred);
   });
 
-  // PUT /:id — update
-  app.put("/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
+  // PUT/PATCH /:id — update
+  const handleUpdateCred = async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
     const body = z.object({
       name: z.string().min(1).optional(),
@@ -131,7 +131,9 @@ export async function sshCredentialRoutes(app: FastifyInstance) {
       .where(eq(schema.sshCredentials.id, id));
 
     return reply.send({ ok: true });
-  });
+  };
+  app.put("/:id", { preHandler: requireRole("admin") }, handleUpdateCred);
+  app.patch("/:id", { preHandler: requireRole("admin") }, handleUpdateCred);
 
   // DELETE /:id
   app.delete("/:id", { preHandler: requireRole("admin") }, async (req, reply) => {

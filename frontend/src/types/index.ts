@@ -12,6 +12,9 @@ export interface User {
   role: UserRole;
   avatar?: string;
   lastLogin?: string;
+  active?: boolean;
+  totpEnabled?: boolean;
+  passwordMustChange?: boolean;
 }
 
 export interface AlertSummary {
@@ -186,7 +189,9 @@ export interface ScheduledJob {
   lastRunStatus?: string;
   nextRun?: string;
   createdAt: string;
-  action: { id: string; name: string; category: string };
+  actionId?: string;
+  actionName?: string;
+  actionJobName?: string;
 }
 
 export interface SshCredential {

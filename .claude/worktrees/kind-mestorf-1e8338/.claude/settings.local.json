@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\Saul Web\\\\SysOps App\\\\backend\\\\src\\\\auth\" /b)",
+      "Bash(npm install *)",
+      "Bash(npm uninstall *)",
+      "Bash(npx tsc *)",
+      "Bash(pg_isready)",
+      "Bash(powershell.exe -Command \"Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object Name,Status\")",
+      "Bash(psql -U postgres -c \"\\\\l sysops_hub\")",
+      "Bash(psql -U postgres -tc \"SELECT datname FROM pg_database WHERE datname = 'sysops_hub';\")",
+      "Bash(powershell.exe -Command \"& 'C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe' -U postgres -tc \\\\\"SELECT datname FROM pg_database WHERE datname = 'sysops_hub';\\\\\" 2>&1\")",
+      "Bash(powershell.exe -NonInteractive -Command ' *)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

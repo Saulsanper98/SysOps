@@ -10,6 +10,9 @@ import { checkDbConnection } from "./db";
 import { registerRoutes } from "./routes";
 import { registry } from "./connectors/registry";
 import { startWorker, automationQueue } from "./jobs/queue";
+import { scheduledJobsRunner } from "./jobs/scheduledJobsRunner";
+import { collectMetrics } from "./jobs/metricsCollector";
+import { wsManager } from "./services/wsManager";
 import cron from "node-cron";
 import { AppError } from "./utils/errors";
 
@@ -52,22 +55,34 @@ async function bootstrap() {
 
   // ─── WebSocket for real-time dashboard ──────────────────────────────
   app.register(async (wsApp) => {
-    wsApp.get("/ws", { websocket: true }, (connection) => {
-      const interval = setInterval(async () => {
+    wsApp.get("/ws", { websocket: true }, (connection, req) => {
+      // Authenticate via query param token (WS can't set Authorization header)
+      let userId: string | null = null;
+      try {
+        const token = (req.query as Record<string, string>).token;
+        if (token) {
+          const payload = (app as any).jwt.verify(token) as { sub: string };
+          userId = payload.sub;
+          wsManager.register(userId, connection);
+        }
+      } catch {
+        // Unauthenticated WS — still gets pings but no targeted notifications
+      }
+
+      const interval = setInterval(() => {
         if (connection.socket.readyState !== 1) {
           clearInterval(interval);
           return;
         }
         try {
-          const summary = {
-            type: "dashboard-update",
-            timestamp: new Date().toISOString(),
-          };
-          connection.socket.send(JSON.stringify(summary));
+          connection.socket.send(JSON.stringify({ type: "ping", timestamp: new Date().toISOString() }));
         } catch {}
       }, 30000);
 
-      connection.socket.on("close", () => clearInterval(interval));
+      connection.socket.on("close", () => {
+        clearInterval(interval);
+        if (userId) wsManager.unregister(userId, connection);
+      });
     });
   });
 
@@ -110,14 +125,27 @@ async function bootstrap() {
   // ─── Workers ─────────────────────────────────────────────────────────
   await startWorker();
 
-  // ─── Scheduled jobs ──────────────────────────────────────────────────
-  // Sync alerts every 2 minutes
+  // ─── Scheduled jobs runner ────────────────────────────────────────────
+  await scheduledJobsRunner.init();
+
+  // ─── Cron jobs ────────────────────────────────────────────────────────
+  // Connector health checks every 2 minutes (parallel)
   cron.schedule("*/2 * * * *", async () => {
     try {
       await registry.checkAll();
       logger.debug("Connector health check cycle done");
     } catch (err) {
       logger.error({ err }, "Scheduled health check failed");
+    }
+  });
+
+  // Metrics collection every 5 minutes
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      await collectMetrics();
+      logger.debug("Metrics collected");
+    } catch (err) {
+      logger.error({ err }, "Metrics collection failed");
     }
   });
 

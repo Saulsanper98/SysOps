@@ -8,6 +8,9 @@ import IncidentDetail from "./pages/IncidentDetail";
 import Automations from "./pages/Automations";
 import KB from "./pages/KB";
 import KBArticle from "./pages/KBArticle";
+import KBEditor from "./pages/KBEditor";
+import Notifications from "./pages/Notifications";
+import AuthCallback from "./pages/AuthCallback";
 import Audit from "./pages/Audit";
 import Systems from "./pages/Systems";
 import SettingsLayout from "./pages/settings/index";
@@ -38,7 +41,10 @@ export default function App() {
             <Route path="/incidents/:id" element={<IncidentDetail />} />
             <Route path="/automations" element={<Automations />} />
             <Route path="/kb" element={<KB />} />
+            <Route path="/kb/new" element={<KBEditor />} />
             <Route path="/kb/:id" element={<KBArticle />} />
+            <Route path="/kb/:id/edit" element={<KBEditor />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/systems" element={<Systems />} />
             <Route path="/settings" element={<SettingsLayout />}>
@@ -49,6 +55,7 @@ export default function App() {
               <Route path="2fa" element={<TwoFactor />} />
             </Route>
           </Route>
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

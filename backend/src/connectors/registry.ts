@@ -53,51 +53,53 @@ class ConnectorRegistry {
   }
 
   async checkAll(): Promise<ConnectorResult[]> {
-    const results: ConnectorResult[] = [];
+    const entries = [...this.connectors.entries()];
 
-    for (const [type, connector] of this.connectors) {
-      const start = Date.now();
-      let health: ConnectorHealth;
+    const results = await Promise.all(
+      entries.map(async ([type, connector]) => {
+        const start = Date.now();
+        let health: ConnectorHealth;
 
-      try {
-        health = await Promise.race([
-          connector.healthCheck(),
-          new Promise<ConnectorHealth>((_, rej) =>
-            setTimeout(() => rej(new Error("Timeout (5s)")), 5000),
-          ),
-        ]);
-      } catch (err: any) {
-        health = { healthy: false, error: err.message, latencyMs: Date.now() - start };
-      }
+        try {
+          health = await Promise.race([
+            connector.healthCheck(),
+            new Promise<ConnectorHealth>((_, rej) =>
+              setTimeout(() => rej(new Error("Timeout (5s)")), 5000),
+            ),
+          ]);
+        } catch (err: any) {
+          health = { healthy: false, error: err.message, latencyMs: Date.now() - start };
+        }
 
-      results.push({
-        type,
-        displayName: connector.displayName,
-        ...health,
-      });
-
-      await db
-        .insert(schema.connectorStatus)
-        .values({
-          type: type as any,
-          name: connector.displayName,
-          healthy: health.healthy,
-          lastCheck: new Date(),
-          lastError: health.error ?? null,
-          latencyMs: health.latencyMs ?? null,
-        })
-        .onConflictDoUpdate({
-          target: schema.connectorStatus.type,
-          set: {
+        await db
+          .insert(schema.connectorStatus)
+          .values({
+            type: type as any,
+            name: connector.displayName,
             healthy: health.healthy,
             lastCheck: new Date(),
             lastError: health.error ?? null,
             latencyMs: health.latencyMs ?? null,
-            updatedAt: new Date(),
-          },
-        })
-        .catch((e) => logger.warn({ e }, "Failed to update connector status"));
-    }
+          })
+          .onConflictDoUpdate({
+            target: schema.connectorStatus.type,
+            set: {
+              healthy: health.healthy,
+              lastCheck: new Date(),
+              lastError: health.error ?? null,
+              latencyMs: health.latencyMs ?? null,
+              updatedAt: new Date(),
+            },
+          })
+          .catch((e) => logger.warn({ e }, "Failed to update connector status"));
+
+        return {
+          type,
+          displayName: connector.displayName,
+          ...health,
+        } as ConnectorResult;
+      }),
+    );
 
     return results;
   }
