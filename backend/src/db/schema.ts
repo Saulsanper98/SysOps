@@ -21,7 +21,7 @@ export const automationStatusEnum = pgEnum("automation_status", [
 ]);
 
 export const connectorTypeEnum = pgEnum("connector_type", [
-  "zabbix", "uptime_kuma", "proxmox", "vcenter", "portainer", "nas", "m365", "qnap",
+  "zabbix", "uptime_kuma", "proxmox", "vcenter", "portainer", "nas", "m365", "qnap", "hikvision",
 ]);
 
 export const notificationTypeEnum = pgEnum("notification_type", ["info", "warning", "error", "success"]);

@@ -12,6 +12,7 @@ import { registry } from "./connectors/registry";
 import { startWorker, automationQueue } from "./jobs/queue";
 import { scheduledJobsRunner } from "./jobs/scheduledJobsRunner";
 import { collectMetrics } from "./jobs/metricsCollector";
+import { runAutoIncidentCheck } from "./jobs/autoIncidentCron";
 import { wsManager } from "./services/wsManager";
 import cron from "node-cron";
 import { AppError } from "./utils/errors";
@@ -146,6 +147,16 @@ async function bootstrap() {
       logger.debug("Metrics collected");
     } catch (err) {
       logger.error({ err }, "Metrics collection failed");
+    }
+  });
+
+  // Auto-incident check every 10 minutes
+  cron.schedule("*/10 * * * *", async () => {
+    try {
+      await runAutoIncidentCheck();
+      logger.debug("Auto-incident check done");
+    } catch (err) {
+      logger.error({ err }, "Auto-incident check failed");
     }
   });
 

@@ -88,5 +88,15 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+const DEFAULT_ENCRYPTION_KEY = "sysops-hub-default-key-32-chars!!";
+if (parsed.data.ENCRYPTION_KEY === DEFAULT_ENCRYPTION_KEY) {
+  if (parsed.data.NODE_ENV === "production") {
+    console.error("❌ ENCRYPTION_KEY is using the insecure default value. Set a strong key in production.");
+    process.exit(1);
+  } else {
+    console.warn("⚠️  ENCRYPTION_KEY is using the default value. Set a strong random key before going to production.");
+  }
+}
+
 export const config = parsed.data;
 export type Config = typeof config;
