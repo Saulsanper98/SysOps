@@ -51,16 +51,33 @@ export default function IncidentDetail() {
     mutationFn: () =>
       api.post(`/incidents/${id}/close`, { ...rca, generateKbArticle: true }),
     onSuccess: (res) => {
-      toast.success("Incidencia cerrada y artículo KB generado");
       setShowClose(false);
       invalidate();
       qc.invalidateQueries({ queryKey: ["incidents"] });
       if (res.data.kbArticle) {
-        setTimeout(() => {
-          if (window.confirm("¿Ver el artículo KB generado?")) {
-            navigate(`/kb/${res.data.kbArticle.id}`);
-          }
-        }, 500);
+        const kbId = res.data.kbArticle.id;
+        toast(
+          (t) => (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-200">Artículo KB generado</span>
+              <button
+                className="px-2.5 py-1 text-xs rounded bg-accent text-white font-medium hover:bg-accent/80 transition-colors"
+                onClick={() => { toast.dismiss(t.id); navigate(`/kb/${kbId}`); }}
+              >
+                Ver
+              </button>
+              <button
+                className="text-slate-500 hover:text-slate-300 transition-colors"
+                onClick={() => toast.dismiss(t.id)}
+              >
+                ✕
+              </button>
+            </div>
+          ),
+          { duration: 10000 },
+        );
+      } else {
+        toast.success("Incidencia cerrada");
       }
     },
     onError: (err) => toast.error(apiError(err)),

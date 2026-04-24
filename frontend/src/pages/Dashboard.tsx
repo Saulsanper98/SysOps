@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { DashboardSummary, SystemStatusItem } from "../types";
 import { Card, CardHeader, CardTitle, CardBody } from "../components/ui/Card";
@@ -7,27 +7,21 @@ import { SeverityDot, StatusDot } from "../components/ui/StatusDot";
 import { Button } from "../components/ui/Button";
 import {
   AlertTriangle, Server, CheckCircle, Activity,
-  Zap, ArrowRight, RefreshCw, TrendingUp, Database,
+  ArrowRight, RefreshCw, Database,
   Globe, Box, HardDrive
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
-  severityColor, severityLabel, systemStatusColor,
+  severityColor, severityLabel,
   timeAgo, cn
 } from "../lib/utils";
 import type { Severity, SystemStatus } from "../types";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
-
-// ─── Mock sparkline data ──────────────────────────────────────────────────────
-const sparkData = Array.from({ length: 20 }, (_, i) => ({
-  t: i,
-  alerts: Math.max(0, 3 + Math.sin(i * 0.5) * 2 + Math.random()),
-}));
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const { data: summary, isLoading, refetch, isFetching } = useQuery<DashboardSummary>({
+  const { data: summary, isLoading, isFetching } = useQuery<DashboardSummary>({
     queryKey: ["dashboard-summary"],
     queryFn: () => api.get("/dashboard/summary").then((r) => r.data),
     refetchInterval: 60000,
@@ -39,6 +33,11 @@ export default function Dashboard() {
     queryFn: () => api.get("/dashboard/systems").then((r) => r.data),
     refetchInterval: 120000,
   });
+
+  const handleRefresh = () => {
+    qc.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    qc.invalidateQueries({ queryKey: ["dashboard-systems"] });
+  };
 
   if (isLoading) return <DashboardSkeleton />;
 
@@ -66,7 +65,7 @@ export default function Dashboard() {
             variant="ghost"
             size="sm"
             icon={<RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />}
-            onClick={() => refetch()}
+            onClick={handleRefresh}
           >
             Actualizar
           </Button>

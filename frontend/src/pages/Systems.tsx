@@ -52,7 +52,15 @@ function TypeIcon({ type }: { type: string }) {
   return <Server className="w-5 h-5 text-orange-400" />;
 }
 
+// Explicit map avoids Tailwind purging dynamic class names
+const metricBgMap: Record<string, string> = {
+  "text-red-400":     "bg-red-400",
+  "text-amber-400":   "bg-amber-400",
+  "text-emerald-400": "bg-emerald-400",
+};
+
 function MetricBar({ label, value, color }: { label: string; value: number; color: string }) {
+  const bgColor = metricBgMap[color] ?? "bg-slate-400";
   return (
     <div className="space-y-0.5">
       <div className="flex justify-between text-xs">
@@ -61,7 +69,7 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
       </div>
       <div className="h-1 bg-ops-700 rounded-full overflow-hidden">
         <div
-          className={cn("h-full rounded-full transition-all", color.replace("text-", "bg-"))}
+          className={cn("h-full rounded-full transition-all", bgColor)}
           style={{ width: `${Math.min(value, 100)}%` }}
         />
       </div>
