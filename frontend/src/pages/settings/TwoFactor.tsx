@@ -4,7 +4,7 @@ import { api, apiError } from "../../lib/api";
 import { Card, CardBody } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import { ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
+import { ShieldCheck, ShieldOff, Smartphone, Copy, Check } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface TwoFactorStatus {
@@ -23,6 +23,14 @@ export default function TwoFactor() {
   const [verifyCode, setVerifyCode] = useState("");
   const [disableCode, setDisableCode] = useState("");
   const [showDisable, setShowDisable] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  const copyKey = (secret: string) => {
+    navigator.clipboard.writeText(secret).then(() => {
+      setKeyCopied(true);
+      setTimeout(() => setKeyCopied(false), 2000);
+    });
+  };
 
   const { data: status, isLoading } = useQuery<TwoFactorStatus>({
     queryKey: ["2fa-status"],
@@ -123,7 +131,16 @@ export default function TwoFactor() {
               <img src={setupData.qrDataUrl} alt="QR Code 2FA" className="w-48 h-48" />
             </div>
             <div className="p-3 bg-ops-950 rounded border border-ops-600">
-              <p className="text-xs text-slate-500 mb-1">Clave manual:</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-slate-500">Clave manual:</p>
+                <button
+                  onClick={() => copyKey(setupData.secret)}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  {keyCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  {keyCopied ? "Copiado" : "Copiar"}
+                </button>
+              </div>
               <p className="font-mono text-xs text-accent select-all">{setupData.secret}</p>
             </div>
             <Input

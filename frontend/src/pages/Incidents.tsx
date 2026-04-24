@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Incident } from "../types";
+import { useAuthStore } from "../store/useStore";
 import { Card, CardBody } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -13,6 +14,7 @@ import { NewIncidentModal } from "../components/incidents/NewIncidentModal";
 import {
   Plus, Search, User, Clock, ChevronRight,
   AlertTriangle, AlignJustify, LayoutGrid, Kanban,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { EmptyState } from "../components/ui/EmptyState";
 import { KanbanView } from "../components/incidents/KanbanView";
@@ -39,27 +41,56 @@ const severityOptions = [
   { value: "baja", label: "Baja" },
 ];
 
+type SortKey = "title" | "severity" | "status" | "createdAt";
+type SortDir = "asc" | "desc";
+
+const SEVERITY_ORDER: Record<string, number> = { critica: 1, alta: 2, media: 3, baja: 4, info: 5 };
+const STATUS_ORDER: Record<string, number> = { abierta: 1, en_progreso: 2, pendiente: 3, resuelta: 4, cerrada: 5 };
+
 export default function Incidents() {
   const navigate = useNavigate();
+  const { user: currentUser } = useAuthStore();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [severity, setSeverity] = useState("");
+  const [assignedToMe, setAssignedToMe] = useState(false);
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
   const [compact, setCompact] = useState(false);
   const [view, setView] = useState<"list" | "kanban">("list");
+  const [sortBy, setSortBy] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortBy(key); setSortDir("asc"); }
+  };
+
+  const assignedToFilter = assignedToMe ? currentUser?.id : undefined;
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["incidents", search, status, severity, page],
+    queryKey: ["incidents", search, status, severity, page, assignedToFilter],
     queryFn: () =>
-      api.get("/incidents", { params: { search: search || undefined, status, severity: severity || undefined, page } })
+      api.get("/incidents", { params: { search: search || undefined, status, severity: severity || undefined, page, assignedTo: assignedToFilter } })
         .then((r) => r.data as { data: Incident[]; total: number; limit: number }),
     placeholderData: keepPreviousData,
   });
 
-  const incidents = data?.data ?? [];
+  const rawIncidents = data?.data ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 20;
+
+  const incidents = useMemo(() => {
+    if (!sortBy) return rawIncidents;
+    return [...rawIncidents].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "title") cmp = a.title.localeCompare(b.title);
+      else if (sortBy === "severity") cmp = (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9);
+      else if (sortBy === "status") cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+      else if (sortBy === "createdAt") cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [rawIncidents, sortBy, sortDir]);
 
   return (
     <div className="p-5 space-y-4 animate-fade-in">
@@ -125,6 +156,18 @@ export default function Incidents() {
             options={severityOptions}
           />
         </div>
+        <button
+          onClick={() => { setAssignedToMe((v) => !v); setPage(1); }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+            assignedToMe
+              ? "bg-accent/20 border-accent/40 text-accent"
+              : "bg-ops-800 border-ops-600 text-slate-500 hover:border-ops-500 hover:text-slate-300",
+          )}
+        >
+          <User className="w-3.5 h-3.5" />
+          Mis incidencias
+        </button>
       </div>
 
       {/* Kanban view */}
@@ -147,10 +190,28 @@ export default function Incidents() {
             <>
               {/* Header row */}
               <div className="grid grid-cols-12 px-4 py-2 border-b border-ops-700 text-xs text-slate-600 uppercase tracking-wide font-medium">
-                <div className="col-span-5">Incidencia</div>
-                <div className="col-span-2">Severidad</div>
-                <div className="col-span-2">Estado</div>
-                <div className="col-span-2">Asignado</div>
+                {(["title", "severity", "status"] as SortKey[]).map((key, i) => (
+                  <button
+                    key={key}
+                    onClick={() => handleSort(key)}
+                    className={cn(
+                      "flex items-center gap-1 hover:text-slate-400 transition-colors text-left",
+                      i === 0 ? "col-span-5" : "col-span-2",
+                      sortBy === key && "text-slate-400",
+                    )}
+                  >
+                    {key === "title" ? "Incidencia" : key === "severity" ? "Severidad" : "Estado"}
+                    {sortBy === key
+                      ? sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                      : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+                  </button>
+                ))}
+                <button
+                  onClick={() => handleSort("createdAt")}
+                  className={cn("col-span-2 flex items-center gap-1 hover:text-slate-400 transition-colors", sortBy === "createdAt" && "text-slate-400")}
+                >
+                  Asignado
+                </button>
                 <div className="col-span-1" />
               </div>
               <div className="divide-y divide-ops-700/50">

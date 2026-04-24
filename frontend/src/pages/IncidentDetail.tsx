@@ -11,7 +11,7 @@ import { Dialog } from "../components/ui/Dialog";
 import { SeverityDot } from "../components/ui/StatusDot";
 import {
   ArrowLeft, CheckSquare, Square, Clock,
-  User, Zap, BookOpen, X, Check, AlertCircle
+  User, Zap, BookOpen, X, Check, AlertCircle, UserPlus
 } from "lucide-react";
 import { Breadcrumb } from "../components/ui/Breadcrumb";
 import {
@@ -20,11 +20,13 @@ import {
 } from "../lib/utils";
 import type { Severity, IncidentStatus } from "../types";
 import toast from "react-hot-toast";
+import { useAuthStore } from "../store/useStore";
 
 export default function IncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user: currentUser } = useAuthStore();
   const [comment, setComment] = useState("");
   const [showClose, setShowClose] = useState(false);
   const [rca, setRca] = useState({ rootCause: "", resolution: "" });
@@ -44,7 +46,13 @@ export default function IncidentDetail() {
 
   const addComment = useMutation({
     mutationFn: () => api.post(`/incidents/${id}/comments`, { content: comment }),
-    onSuccess: () => { setComment(""); invalidate(); },
+    onSuccess: () => { toast.success("Comentario añadido"); setComment(""); invalidate(); },
+    onError: (err) => toast.error(apiError(err)),
+  });
+
+  const assignToMe = useMutation({
+    mutationFn: () => api.put(`/incidents/${id}`, { assignedTo: currentUser?.id }),
+    onSuccess: () => { toast.success("Incidencia asignada"); invalidate(); },
     onError: (err) => toast.error(apiError(err)),
   });
 
@@ -147,6 +155,17 @@ export default function IncidentDetail() {
         {/* Actions */}
         {!isClosed && (
           <div className="flex gap-2 flex-shrink-0">
+            {inc.assignedUser?.id !== currentUser?.id && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<UserPlus className="w-4 h-4" />}
+                loading={assignToMe.isPending}
+                onClick={() => assignToMe.mutate()}
+              >
+                Asignarme
+              </Button>
+            )}
             {inc.status === "abierta" && (
               <Button variant="secondary" size="sm" onClick={() => updateStatus.mutate("en_progreso")}>
                 Tomar

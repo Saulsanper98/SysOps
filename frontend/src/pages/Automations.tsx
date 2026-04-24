@@ -264,6 +264,13 @@ export default function Automations() {
                 {(runDetail.status === "pendiente" || runDetail.status === "ejecutando") && (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
                 )}
+                <button
+                  onClick={() => refetchRunDetail()}
+                  className="ml-auto p-1.5 rounded hover:bg-ops-700 text-slate-500 hover:text-slate-300 transition-colors"
+                  title="Actualizar salida"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               </div>
               <div className="bg-ops-950 rounded-lg border border-ops-700 p-3 font-mono text-xs text-slate-300 min-h-32 max-h-96 overflow-y-auto whitespace-pre-wrap">
                 {runDetail.output ?? (runDetail.status === "pendiente" || runDetail.status === "ejecutando"
