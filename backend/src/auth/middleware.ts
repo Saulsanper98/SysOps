@@ -2,8 +2,8 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { UnauthorizedError, ForbiddenError } from "../utils/errors";
 import type { JWTPayload } from "./index";
 
-declare module "fastify" {
-  interface FastifyRequest {
+declare module "@fastify/jwt" {
+  interface FastifyJWT {
     user: JWTPayload;
   }
 }

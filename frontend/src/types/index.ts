@@ -79,6 +79,7 @@ export interface Incident {
   checklist?: ChecklistItem[];
   comments?: IncidentComment[];
   automationRuns?: AutomationRunSummary[];
+  kbArticleId?: string;
 }
 
 export interface ChecklistItem {

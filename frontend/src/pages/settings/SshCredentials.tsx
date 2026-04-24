@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../../lib/api";
 import type { SshCredential } from "../../types";
@@ -146,7 +146,7 @@ export default function SshCredentials() {
                       variant="ghost"
                       size="xs"
                       icon={<Wifi className="w-3.5 h-3.5" />}
-                      loading={testCred.isLoading && testCred.variables === cred.id}
+                      loading={testCred.isPending && testCred.variables === cred.id}
                       onClick={() => testCred.mutate(cred.id)}
                       title="Probar conexión"
                     >
@@ -212,7 +212,7 @@ export default function SshCredentials() {
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="ghost" onClick={() => { setShowNew(false); setEditCred(null); }}>Cancelar</Button>
               <Button
-                loading={createCred.isLoading || updateCred.isLoading}
+                loading={createCred.isPending || updateCred.isPending}
                 onClick={() => {
                   if (editCred) updateCred.mutate({ id: editCred.id, data: form });
                   else createCred.mutate(form);
@@ -235,7 +235,7 @@ export default function SshCredentials() {
             </div>
             <div className="flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancelar</Button>
-              <Button variant="danger" loading={deleteCred.isLoading} onClick={() => deleteCred.mutate(deleteId)}>
+              <Button variant="danger" loading={deleteCred.isPending} onClick={() => deleteCred.mutate(deleteId)}>
                 Eliminar
               </Button>
             </div>

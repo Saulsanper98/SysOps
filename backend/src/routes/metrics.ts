@@ -1,9 +1,26 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db, schema } from "../db";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../auth/middleware";
 import { ValidationError } from "../utils/errors";
+
+// Map granularity string to bucket size in milliseconds
+const GRANULARITY_MS: Record<string, number> = {
+  "5m":  5  * 60 * 1000,
+  "15m": 15 * 60 * 1000,
+  "30m": 30 * 60 * 1000,
+  "1h":  60 * 60 * 1000,
+  "6h":  6  * 60 * 60 * 1000,
+  "12h": 12 * 60 * 60 * 1000,
+  "1d":  24 * 60 * 60 * 1000,
+  "1w":  7  * 24 * 60 * 60 * 1000,
+};
+
+function bucketTimestamp(ts: Date, bucketMs: number): string {
+  const bucketed = new Date(Math.floor(ts.getTime() / bucketMs) * bucketMs);
+  return bucketed.toISOString();
+}
 
 export async function metricsRoutes(app: FastifyInstance) {
   // GET /history — metric history with aggregation
@@ -24,18 +41,7 @@ export async function metricsRoutes(app: FastifyInstance) {
       throw new ValidationError("Parámetros de fecha inválidos");
     }
 
-    // Map granularity to valid date_trunc unit
-    const granularityMap: Record<string, string> = {
-      "5m": "minute",
-      "15m": "minute",
-      "30m": "minute",
-      "1h": "hour",
-      "6h": "hour",
-      "12h": "hour",
-      "1d": "day",
-      "1w": "week",
-    };
-    const truncUnit = granularityMap[query.granularity] ?? "hour";
+    const bucketMs = GRANULARITY_MS[query.granularity] ?? GRANULARITY_MS["1h"];
 
     const conditions = [
       eq(schema.metricSnapshots.metricType, query.type),
@@ -47,21 +53,26 @@ export async function metricsRoutes(app: FastifyInstance) {
       conditions.push(eq(schema.metricSnapshots.source, query.source));
     }
 
-    const rows = await db
-      .select({
-        timestamp: sql<string>`date_trunc(${truncUnit}, ${schema.metricSnapshots.createdAt})`,
-        value: sql<number>`ROUND(AVG(${schema.metricSnapshots.value}))`,
-      })
-      .from(schema.metricSnapshots)
-      .where(and(...conditions))
-      .groupBy(sql`date_trunc(${truncUnit}, ${schema.metricSnapshots.createdAt})`)
-      .orderBy(sql`date_trunc(${truncUnit}, ${schema.metricSnapshots.createdAt})`);
-
-    // Stats from raw data
+    // Fetch raw rows — bucket aggregation done in JS (avoids date_trunc parameterization)
     const rawRows = await db
-      .select({ value: schema.metricSnapshots.value })
+      .select({ value: schema.metricSnapshots.value, createdAt: schema.metricSnapshots.createdAt })
       .from(schema.metricSnapshots)
       .where(and(...conditions));
+
+    // Bucket by timestamp
+    const buckets = new Map<string, number[]>();
+    for (const row of rawRows) {
+      const key = bucketTimestamp(row.createdAt, bucketMs);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(row.value);
+    }
+
+    const data = Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([timestamp, vals]) => ({
+        timestamp,
+        value: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length),
+      }));
 
     const values = rawRows.map((r) => r.value);
     const stats = values.length > 0
@@ -76,7 +87,7 @@ export async function metricsRoutes(app: FastifyInstance) {
     return {
       source: query.source ?? "all",
       metricType: query.type,
-      data: rows.map((r) => ({ timestamp: r.timestamp, value: r.value })),
+      data,
       stats,
     };
   });

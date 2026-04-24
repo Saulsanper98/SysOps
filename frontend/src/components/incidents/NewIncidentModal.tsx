@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api, apiError } from "../../lib/api";
 import { Dialog } from "../ui/Dialog";
@@ -21,7 +21,7 @@ export function NewIncidentModal({ onClose, onCreated }: Props) {
     tags: "",
   });
 
-  const { mutate, isLoading } = useMutation({
+  const { mutate, isPending: isLoading } = useMutation({
     mutationFn: (data: typeof form) =>
       api.post("/incidents", {
         ...data,

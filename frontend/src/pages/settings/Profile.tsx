@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api, apiError } from "../../lib/api";
 import { useAuthStore } from "../../store/useStore";
@@ -58,7 +58,7 @@ export default function Profile() {
           <div className="flex justify-end">
             <Button
               icon={<Save className="w-4 h-4" />}
-              loading={updateProfile.isLoading}
+              loading={updateProfile.isPending}
               onClick={() => updateProfile.mutate()}
             >
               Guardar cambios

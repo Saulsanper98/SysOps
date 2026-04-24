@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../../lib/api";
 import type { ScheduledJob, AutomationAction, ActionParameter } from "../../types";
@@ -246,7 +246,7 @@ export function ScheduledJobsTab() {
                 Cancelar
               </Button>
               <Button
-                loading={createJob.isLoading}
+                loading={createJob.isPending}
                 disabled={!form.name || !form.actionId || !form.cronExpression}
                 onClick={() => createJob.mutate(form)}
               >
@@ -267,7 +267,7 @@ export function ScheduledJobsTab() {
             </div>
             <div className="flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancelar</Button>
-              <Button variant="danger" loading={deleteJob.isLoading} onClick={() => deleteJob.mutate(deleteId)}>
+              <Button variant="danger" loading={deleteJob.isPending} onClick={() => deleteJob.mutate(deleteId)}>
                 Eliminar
               </Button>
             </div>

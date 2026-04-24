@@ -1,14 +1,16 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, AlertTriangle, Zap, BookOpen,
-  ClipboardList, Settings, ChevronRight, Activity,
-  Shield
+  ClipboardList, Settings, ChevronRight, Shield,
+  Server, Users, KeyRound, Lock
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuthStore } from "../../store/useStore";
+import { useState } from "react";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", exact: true },
+  { to: "/systems", icon: Server, label: "Sistemas" },
   { to: "/incidents", icon: AlertTriangle, label: "Incidencias" },
   { to: "/automations", icon: Zap, label: "Automatizaciones" },
   { to: "/kb", icon: BookOpen, label: "Base de Conocimiento" },
@@ -18,6 +20,9 @@ const navItems = [
 export function Sidebar() {
   const { user } = useAuthStore();
   const location = useLocation();
+  const [settingsOpen, setSettingsOpen] = useState(location.pathname.startsWith("/settings"));
+
+  const isAdmin = user?.role === "admin";
 
   return (
     <aside className="w-60 flex-shrink-0 bg-ops-950 border-r border-ops-600 flex flex-col">
@@ -61,23 +66,61 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom: user + settings */}
+      {/* Bottom: settings + user */}
       <div className="px-2 py-3 border-t border-ops-600 space-y-0.5">
-        {user?.role === "admin" && (
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                isActive ? "bg-accent/10 text-accent" : "text-slate-500 hover:text-slate-200 hover:bg-ops-700",
-              )
-            }
-          >
-            <Settings className="w-4 h-4" />
-            <span>Configuración</span>
-          </NavLink>
+        {/* Settings expandable */}
+        <button
+          onClick={() => setSettingsOpen((o) => !o)}
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+            location.pathname.startsWith("/settings")
+              ? "bg-accent/10 text-accent"
+              : "text-slate-500 hover:text-slate-200 hover:bg-ops-700",
+          )}
+        >
+          <Settings className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 text-left">Configuración</span>
+          <ChevronRight className={cn("w-3 h-3 transition-transform", settingsOpen && "rotate-90")} />
+        </button>
+
+        {settingsOpen && (
+          <div className="pl-4 space-y-0.5">
+            <NavLink
+              to="/settings/profile"
+              className={({ isActive }) =>
+                cn("flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors",
+                  isActive ? "text-accent bg-accent/5" : "text-slate-500 hover:text-slate-300 hover:bg-ops-700")
+              }
+            >
+              <Lock className="w-3 h-3" /> Mi Perfil / 2FA
+            </NavLink>
+            {isAdmin && (
+              <NavLink
+                to="/settings/users"
+                className={({ isActive }) =>
+                  cn("flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors",
+                    isActive ? "text-accent bg-accent/5" : "text-slate-500 hover:text-slate-300 hover:bg-ops-700")
+                }
+              >
+                <Users className="w-3 h-3" /> Usuarios
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink
+                to="/settings/ssh"
+                className={({ isActive }) =>
+                  cn("flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors",
+                    isActive ? "text-accent bg-accent/5" : "text-slate-500 hover:text-slate-300 hover:bg-ops-700")
+                }
+              >
+                <KeyRound className="w-3 h-3" /> SSH Credentials
+              </NavLink>
+            )}
+          </div>
         )}
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
+
+        {/* User info */}
+        <div className="flex items-center gap-3 px-3 py-2 rounded-lg mt-1">
           <div className="w-7 h-7 rounded-full bg-ops-600 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-bold text-slate-300">
               {user?.displayName?.charAt(0)?.toUpperCase() ?? "?"}

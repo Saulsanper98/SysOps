@@ -75,7 +75,8 @@ async function fix() {
     .onConflictDoNothing();
 
   const result = await db.execute(sql`SELECT COUNT(*) as total FROM automation_actions`);
-  logger.info(`✅ Listo. Acciones únicas en BD: ${result.rows[0].total}`);
+  const rows = result as unknown as Array<{ total: number }>;
+  logger.info(`✅ Listo. Acciones únicas en BD: ${rows[0]?.total ?? "?"}`);
   process.exit(0);
 }
 

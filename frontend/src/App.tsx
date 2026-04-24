@@ -9,6 +9,12 @@ import Automations from "./pages/Automations";
 import KB from "./pages/KB";
 import KBArticle from "./pages/KBArticle";
 import Audit from "./pages/Audit";
+import Systems from "./pages/Systems";
+import SettingsLayout from "./pages/settings/index";
+import UsersPage from "./pages/settings/Users";
+import SshCredentials from "./pages/settings/SshCredentials";
+import TwoFactor from "./pages/settings/TwoFactor";
+import Profile from "./pages/settings/Profile";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +40,14 @@ export default function App() {
             <Route path="/kb" element={<KB />} />
             <Route path="/kb/:id" element={<KBArticle />} />
             <Route path="/audit" element={<Audit />} />
+            <Route path="/systems" element={<Systems />} />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="/settings/profile" replace />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="users" element={<UsersPage />} />
+              <Route path="ssh" element={<SshCredentials />} />
+              <Route path="2fa" element={<TwoFactor />} />
+            </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

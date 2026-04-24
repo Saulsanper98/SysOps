@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../../lib/api";
 import type { User, UserRole } from "../../types";
@@ -206,7 +206,7 @@ export default function UsersPage() {
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="ghost" onClick={() => setShowNew(false)}>Cancelar</Button>
               <Button
-                loading={createUser.isLoading}
+                loading={createUser.isPending}
                 onClick={() => createUser.mutate(newUser)}
               >
                 Crear usuario
@@ -240,7 +240,7 @@ export default function UsersPage() {
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="ghost" onClick={() => setEditUser(null)}>Cancelar</Button>
               <Button
-                loading={updateUser.isLoading}
+                loading={updateUser.isPending}
                 onClick={() =>
                   updateUser.mutate({
                     id: editUser.id,

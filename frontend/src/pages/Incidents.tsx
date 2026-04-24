@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Incident } from "../types";
@@ -50,7 +50,7 @@ export default function Incidents() {
     queryFn: () =>
       api.get("/incidents", { params: { search: search || undefined, status, severity: severity || undefined, page } })
         .then((r) => r.data as { data: Incident[]; total: number; limit: number }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const incidents = data?.data ?? [];

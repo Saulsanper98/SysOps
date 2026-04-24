@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../lib/api";
 import type { AutomationAction, AutomationRun } from "../types";
@@ -55,7 +55,10 @@ export default function Automations() {
     queryKey: ["automation-run", runOutput.runId],
     queryFn: () => api.get(`/automations/runs/${runOutput.runId}`).then((r) => r.data),
     enabled: runOutput.open && !!runOutput.runId,
-    refetchInterval: (data) => data?.status === "ejecutando" || data?.status === "pendiente" ? 2000 : false,
+    refetchInterval: (query) => {
+      const d = query.state.data as AutomationRun | undefined;
+      return d?.status === "ejecutando" || d?.status === "pendiente" ? 2000 : false;
+    },
   });
 
   const executeAction = useMutation({
@@ -237,7 +240,7 @@ export default function Automations() {
               <Button variant="ghost" onClick={() => setExecuting(null)}>Cancelar</Button>
               <Button
                 icon={<Play className="w-4 h-4" />}
-                loading={executeAction.isLoading}
+                loading={executeAction.isPending}
                 onClick={() => executeAction.mutate({ actionId: executing.id, parameters: params })}
               >
                 Ejecutar

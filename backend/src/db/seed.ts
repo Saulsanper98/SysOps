@@ -1,5 +1,6 @@
 import "../config"; // carga dotenv antes de cualquier cosa
 import { db, schema } from "./index";
+import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth";
 import { logger } from "../utils/logger";
 
@@ -174,14 +175,14 @@ async function seed() {
   const [jgarcia, mlopez] = await db
     .select()
     .from(schema.users)
-    .where(schema.users.active)
+    .where(eq(schema.users.active, true))
     .limit(4)
     .then((u) => u.filter((x) => x.username !== "admin"));
 
   const [webSrv] = await db
     .select()
     .from(schema.systems)
-    .where(schema.systems.active)
+    .where(eq(schema.systems.active, true))
     .limit(1);
 
   if (jgarcia && webSrv) {

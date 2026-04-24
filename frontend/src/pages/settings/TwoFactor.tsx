@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../../lib/api";
 import { Card, CardBody } from "../../components/ui/Card";
@@ -91,7 +91,7 @@ export default function TwoFactor() {
             {!status?.enabled && !setupData && (
               <Button
                 icon={<Smartphone className="w-4 h-4" />}
-                loading={setup2fa.isLoading}
+                loading={setup2fa.isPending}
                 onClick={() => setup2fa.mutate()}
               >
                 Activar 2FA
@@ -135,7 +135,7 @@ export default function TwoFactor() {
             <div className="flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setSetupData(null)}>Cancelar</Button>
               <Button
-                loading={verify2fa.isLoading}
+                loading={verify2fa.isPending}
                 disabled={verifyCode.length !== 6}
                 onClick={() => verify2fa.mutate(verifyCode)}
               >
@@ -165,7 +165,7 @@ export default function TwoFactor() {
               <Button variant="ghost" onClick={() => setShowDisable(false)}>Cancelar</Button>
               <Button
                 variant="danger"
-                loading={disable2fa.isLoading}
+                loading={disable2fa.isPending}
                 disabled={disableCode.length !== 6}
                 onClick={() => disable2fa.mutate(disableCode)}
               >

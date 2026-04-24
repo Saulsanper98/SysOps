@@ -44,8 +44,8 @@ export class VCenterConnector extends BaseConnector {
     this.sessionExpiry = Date.now() + 20 * 60 * 1000;
 
     // Inject into the shared instance
-    this.http.defaults.headers.common["vmware-api-session-id"] = this.sessionId;
-    return this.sessionId;
+    this.http.defaults.headers.common["vmware-api-session-id"] = this.sessionId!;
+    return this.sessionId!;
   }
 
   async healthCheck(): Promise<ConnectorHealth> {

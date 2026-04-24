@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../lib/api";
@@ -245,7 +245,7 @@ export default function IncidentDetail() {
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && comment && addComment.mutate()}
                     className="flex-1 bg-ops-850 border border-ops-600 rounded px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-accent"
                   />
-                  <Button size="sm" disabled={!comment} loading={addComment.isLoading} onClick={() => addComment.mutate()}>
+                  <Button size="sm" disabled={!comment} loading={addComment.isPending} onClick={() => addComment.mutate()}>
                     Enviar
                   </Button>
                 </div>
@@ -330,7 +330,7 @@ export default function IncidentDetail() {
           />
           <div className="flex justify-end gap-3">
             <Button type="button" variant="ghost" onClick={() => setShowClose(false)}>Cancelar</Button>
-            <Button type="submit" loading={closeIncident.isLoading} icon={<Check className="w-4 h-4" />}>
+            <Button type="submit" loading={closeIncident.isPending} icon={<Check className="w-4 h-4" />}>
               Cerrar y generar KB
             </Button>
           </div>
