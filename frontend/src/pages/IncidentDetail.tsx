@@ -297,7 +297,16 @@ export default function IncidentDetail() {
                       <span className="text-xs text-slate-700">{timeAgo(c.createdAt)}</span>
                     </div>
                     <p className={cn("text-sm mt-0.5", c.isSystemMessage ? "text-slate-500 italic" : "text-slate-300")}>
-                      {c.content}
+                      {c.isSystemMessage
+                        ? c.content
+                        : c.content.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
+                            if (part.startsWith("**") && part.endsWith("**"))
+                              return <strong key={i} className="font-semibold text-slate-100">{part.slice(2, -2)}</strong>;
+                            if (part.startsWith("`") && part.endsWith("`"))
+                              return <code key={i} className="px-1 py-0.5 rounded bg-ops-700 text-accent font-mono text-xs">{part.slice(1, -1)}</code>;
+                            return part;
+                          })
+                      }
                     </p>
                   </div>
                 </div>

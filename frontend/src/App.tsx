@@ -15,6 +15,7 @@ import Audit from "./pages/Audit";
 import Systems from "./pages/Systems";
 import NotFound from "./pages/NotFound";
 import Alerts from "./pages/Alerts";
+import Metrics from "./pages/Metrics";
 import SettingsLayout from "./pages/settings/index";
 import UsersPage from "./pages/settings/Users";
 import SshCredentials from "./pages/settings/SshCredentials";
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/kb/:id/edit" element={<KBEditor />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/alerts" element={<Alerts />} />
+            <Route path="/metrics" element={<Metrics />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/systems" element={<Systems />} />
             <Route path="/settings" element={<SettingsLayout />}>

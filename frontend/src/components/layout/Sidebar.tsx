@@ -3,7 +3,7 @@ import {
   LayoutDashboard, AlertTriangle, Zap, BookOpen,
   ClipboardList, Settings, ChevronRight, Shield,
   Server, Users, KeyRound, Lock, PanelLeftClose, PanelLeftOpen,
-  Bell,
+  Bell, BarChart2,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuthStore, useSidebarStore } from "../../store/useStore";
@@ -20,6 +20,7 @@ const navItems = [
   { to: "/automations", icon: Zap, label: "Automatizaciones" },
   { to: "/kb", icon: BookOpen, label: "Base de Conocimiento" },
   { to: "/audit", icon: ClipboardList, label: "Auditoría" },
+  { to: "/metrics", icon: BarChart2, label: "Métricas" },
 ];
 
 export function Sidebar() {
