@@ -8,6 +8,7 @@ import { PortainerConnector } from "./portainer";
 import { NasConnector } from "./nas";
 import { MockConnector, mockAlerts, mockSystems } from "./mock";
 import { QnapConnector } from "./qnap";
+import { HikvisionConnector } from "./hikvision";
 import { logger } from "../utils/logger";
 import { db, schema } from "../db";
 import { eq } from "drizzle-orm";
@@ -48,6 +49,7 @@ class ConnectorRegistry {
     if (config.PORTAINER_URL) this.connectors.set("portainer", new PortainerConnector());
     if (config.NAS_URL) this.connectors.set("nas", new NasConnector());
     if (config.QNAP_URL) this.connectors.set("qnap", new QnapConnector());
+    if (config.HIKVISION_URL) this.connectors.set("hikvision", new HikvisionConnector());
 
     logger.info({ connectors: [...this.connectors.keys()] }, "Connector registry initialized");
   }

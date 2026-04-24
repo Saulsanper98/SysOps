@@ -268,13 +268,15 @@ function KpiCard({
 
 function ConnectorIcon({ type }: { type: string }) {
   const icons: Record<string, React.ReactNode> = {
-    zabbix: <Activity className="w-4 h-4 text-red-400" />,
-    uptime_kuma: <Globe className="w-4 h-4 text-emerald-400" />,
-    proxmox: <Server className="w-4 h-4 text-orange-400" />,
-    vcenter: <Server className="w-4 h-4 text-blue-400" />,
-    portainer: <Box className="w-4 h-4 text-cyan-400" />,
-    nas: <HardDrive className="w-4 h-4 text-purple-400" />,
-    m365: <Database className="w-4 h-4 text-blue-400" />,
+    zabbix:      <Activity   className="w-4 h-4 text-red-400"     />,
+    uptime_kuma: <Globe      className="w-4 h-4 text-emerald-400" />,
+    proxmox:     <Server     className="w-4 h-4 text-orange-400"  />,
+    vcenter:     <Server     className="w-4 h-4 text-blue-400"    />,
+    portainer:   <Box        className="w-4 h-4 text-cyan-400"    />,
+    nas:         <HardDrive  className="w-4 h-4 text-purple-400"  />,
+    qnap:        <HardDrive  className="w-4 h-4 text-teal-400"    />,
+    hikvision:   <Database   className="w-4 h-4 text-rose-400"    />,
+    m365:        <Database   className="w-4 h-4 text-blue-400"    />,
   };
   return <span>{icons[type] ?? <Database className="w-4 h-4 text-slate-500" />}</span>;
 }

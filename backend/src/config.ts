@@ -58,6 +58,11 @@ const envSchema = z.object({
   QNAP_USER: z.string().optional(),
   QNAP_PASSWORD: z.string().optional(),
 
+  // Hikvision NVR/DVR (ISAPI)
+  HIKVISION_URL: z.string().optional(),
+  HIKVISION_USER: z.string().optional(),
+  HIKVISION_PASSWORD: z.string().optional(),
+
   // Encryption
   ENCRYPTION_KEY: z.string().default("sysops-hub-default-key-32-chars!!"),
 

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"; // Navigate kept for settings redirect
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "./components/layout/AppShell";
 import Login from "./pages/Login";
@@ -13,6 +13,7 @@ import Notifications from "./pages/Notifications";
 import AuthCallback from "./pages/AuthCallback";
 import Audit from "./pages/Audit";
 import Systems from "./pages/Systems";
+import NotFound from "./pages/NotFound";
 import SettingsLayout from "./pages/settings/index";
 import UsersPage from "./pages/settings/Users";
 import SshCredentials from "./pages/settings/SshCredentials";
@@ -54,9 +55,9 @@ export default function App() {
               <Route path="ssh" element={<SshCredentials />} />
               <Route path="2fa" element={<TwoFactor />} />
             </Route>
+            <Route path="*" element={<NotFound />} />
           </Route>
           <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
