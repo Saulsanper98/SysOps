@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db, schema } from "../db";
-import { eq, ne } from "drizzle-orm";
+import { eq, ne, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../auth/middleware";
 import { hashPassword } from "../auth";
 import { NotFoundError, ForbiddenError, ValidationError } from "../utils/errors";
@@ -169,6 +169,20 @@ export async function userRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, id))
       .limit(1);
     if (!existing) throw new NotFoundError("Usuario");
+
+    if (!active && existing.role === "admin") {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.users)
+        .where(and(
+          eq(schema.users.role, "admin"),
+          eq(schema.users.active, true),
+          ne(schema.users.id, id),
+        ));
+      if (Number(count) === 0) {
+        throw new ForbiddenError("No puedes desactivar al último administrador activo");
+      }
+    }
 
     await db
       .update(schema.users)

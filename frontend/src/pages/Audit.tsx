@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
 import type { AuditEvent } from "../types";
 import { Card, CardBody } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
-import { ClipboardList, Filter, ChevronRight, User } from "lucide-react";
+import { ClipboardList, Filter, ChevronRight, User, Download } from "lucide-react";
+import { api } from "../lib/api";
+import { useQuery } from "@tanstack/react-query";
+import type { User as UserType } from "../types";
 import { formatDate, cn } from "../lib/utils";
 
 const actionColors: Record<string, string> = {
@@ -35,7 +36,24 @@ export default function Audit() {
   const [action, setAction] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [userId, setUserId] = useState("");
   const [page, setPage] = useState(1);
+
+  const { data: users } = useQuery<UserType[]>({
+    queryKey: ["users"],
+    queryFn: () => api.get("/users").then((r) => r.data),
+  });
+
+  const handleExport = (format: "csv" | "json") => {
+    const params = new URLSearchParams();
+    params.set("format", format);
+    if (entityType) params.set("entityType", entityType);
+    if (action) params.set("action", action);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const url = `${(api.defaults.baseURL ?? "").replace(/\/$/, "")}/audit/export?${params}`;
+    window.open(url, "_blank");
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["audit", entityType, action, from, to, page],
@@ -46,6 +64,7 @@ export default function Audit() {
           action: action || undefined,
           from: from || undefined,
           to: to || undefined,
+          userId: userId || undefined,
           page,
           limit: 30,
         },
@@ -58,9 +77,19 @@ export default function Audit() {
   return (
     <div className="p-5 space-y-4 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-bold text-slate-100">Auditoría</h1>
-        <p className="text-xs text-slate-500 mt-0.5">Registro completo de acciones · {total} eventos</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-slate-100">Auditoría</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Registro completo de acciones · {total} eventos</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" icon={<Download className="w-3.5 h-3.5" />} onClick={() => handleExport("csv")}>
+            CSV
+          </Button>
+          <Button variant="ghost" size="sm" icon={<Download className="w-3.5 h-3.5" />} onClick={() => handleExport("json")}>
+            JSON
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -110,11 +139,22 @@ export default function Audit() {
           onChange={(e) => { setTo(e.target.value); setPage(1); }}
           className="w-36"
         />
-        {(entityType || action || from || to) && (
+        <div className="w-44">
+          <Select
+            label="Usuario"
+            value={userId}
+            onChange={(e) => { setUserId(e.target.value); setPage(1); }}
+            options={[
+              { value: "", label: "Todos los usuarios" },
+              ...(users ?? []).map((u) => ({ value: u.id, label: u.displayName })),
+            ]}
+          />
+        </div>
+        {(entityType || action || from || to || userId) && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setEntityType(""); setAction(""); setFrom(""); setTo(""); setPage(1); }}
+            onClick={() => { setEntityType(""); setAction(""); setFrom(""); setTo(""); setUserId(""); setPage(1); }}
           >
             Limpiar
           </Button>

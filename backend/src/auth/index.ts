@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { UnauthorizedError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { recordAudit } from "../utils/audit";
+import { checkBruteForce, recordFailedAttempt, clearBruteForce } from "./bruteForce";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 export interface JWTPayload {
@@ -18,23 +19,26 @@ export async function loginWithPassword(
   password: string,
   req: FastifyRequest,
 ): Promise<{ user: typeof schema.users.$inferSelect; token: string }> {
+  await checkBruteForce(username);
+
   const [user] = await db
     .select()
     .from(schema.users)
     .where(eq(schema.users.username, username))
     .limit(1);
 
-  if (!user || !user.passwordHash) {
+  if (!user || !user.passwordHash || !user.active) {
+    await recordFailedAttempt(username);
     throw new UnauthorizedError("Credenciales incorrectas");
-  }
-  if (!user.active) {
-    throw new UnauthorizedError("Usuario desactivado");
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
+    await recordFailedAttempt(username);
     throw new UnauthorizedError("Credenciales incorrectas");
   }
+
+  await clearBruteForce(username);
 
   await db
     .update(schema.users)
