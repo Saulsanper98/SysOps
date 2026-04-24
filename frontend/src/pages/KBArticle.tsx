@@ -11,6 +11,7 @@ import {
   Link as LinkIcon, Sparkles, Clock
 } from "lucide-react";
 import { formatDate, cn } from "../lib/utils";
+import { Breadcrumb } from "../components/ui/Breadcrumb";
 import toast from "react-hot-toast";
 
 export default function KBArticle() {
@@ -44,6 +45,13 @@ export default function KBArticle() {
 
   return (
     <div className="p-5 space-y-4 animate-fade-in max-w-3xl">
+      {/* Breadcrumb */}
+      <Breadcrumb items={[
+        { label: "Dashboard", to: "/" },
+        { label: "Base de Conocimiento", to: "/kb" },
+        { label: article.title },
+      ]} />
+
       {/* Back + actions */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate("/kb")}>

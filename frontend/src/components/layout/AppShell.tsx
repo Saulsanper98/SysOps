@@ -3,6 +3,7 @@ import { Outlet, Navigate, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { useAuthStore } from "../../store/useStore";
+import { CommandPalette } from "../search/CommandPalette";
 import { Toaster } from "react-hot-toast";
 import { WifiOff, AlertTriangle } from "lucide-react";
 
@@ -25,6 +26,19 @@ export function AppShell() {
   const { isAuthenticated, user } = useAuthStore();
   const navigate = useNavigate();
   const online = useOnlineStatus();
+  const [cmdOpen, setCmdOpen] = useState(false);
+
+  // Global Ctrl+K / Cmd+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
@@ -62,6 +76,7 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <Toaster
         position="bottom-right"
         toastOptions={{

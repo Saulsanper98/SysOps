@@ -11,9 +11,11 @@ import { Select } from "../components/ui/Select";
 import { SeverityDot } from "../components/ui/StatusDot";
 import { NewIncidentModal } from "../components/incidents/NewIncidentModal";
 import {
-  Plus, Search, Filter, User, Clock, ChevronRight,
-  AlertTriangle
+  Plus, Search, User, Clock, ChevronRight,
+  AlertTriangle, AlignJustify, LayoutGrid, Kanban,
 } from "lucide-react";
+import { EmptyState } from "../components/ui/EmptyState";
+import { KanbanView } from "../components/incidents/KanbanView";
 import {
   severityColor, severityLabel, incidentStatusColor,
   incidentStatusLabel, timeAgo, cn
@@ -44,6 +46,8 @@ export default function Incidents() {
   const [severity, setSeverity] = useState("");
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [view, setView] = useState<"list" | "kanban">("list");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["incidents", search, status, severity, page],
@@ -65,9 +69,36 @@ export default function Incidents() {
           <h1 className="text-lg font-bold text-slate-100">Incidencias</h1>
           <p className="text-xs text-slate-500 mt-0.5">{total} incidencias totales</p>
         </div>
-        <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowNew(true)}>
-          Nueva incidencia
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border border-ops-600 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setView("list")}
+              title="Vista lista"
+              className={cn("p-1.5 transition-colors", view === "list" ? "bg-ops-600 text-slate-200" : "text-slate-500 hover:text-slate-300")}
+            >
+              <AlignJustify className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setView("kanban")}
+              title="Vista kanban"
+              className={cn("p-1.5 transition-colors", view === "kanban" ? "bg-ops-600 text-slate-200" : "text-slate-500 hover:text-slate-300")}
+            >
+              <Kanban className="w-4 h-4" />
+            </button>
+          </div>
+          {view === "list" && (
+            <button
+              onClick={() => setCompact((v) => !v)}
+              title={compact ? "Vista normal" : "Vista compacta"}
+              className="p-1.5 rounded hover:bg-ops-700 text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          )}
+          <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowNew(true)}>
+            Nueva incidencia
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -96,16 +127,22 @@ export default function Incidents() {
         </div>
       </div>
 
-      {/* Table */}
-      <Card>
+      {/* Kanban view */}
+      {view === "kanban" && !isLoading && (
+        <KanbanView incidents={incidents} />
+      )}
+
+      {/* List view */}
+      {view === "kanban" ? null : <Card>
         <CardBody className="p-0">
           {isLoading ? (
             <div className="py-12 text-center text-slate-600 text-sm">Cargando...</div>
           ) : incidents.length === 0 ? (
-            <div className="py-12 text-center">
-              <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-slate-700" />
-              <p className="text-slate-600 text-sm">No se encontraron incidencias</p>
-            </div>
+            <EmptyState
+              icon={<AlertTriangle className="w-7 h-7" />}
+              title="Sin incidencias"
+              description="No se encontraron incidencias con los filtros aplicados."
+            />
           ) : (
             <>
               {/* Header row */}
@@ -121,7 +158,7 @@ export default function Incidents() {
                   <div
                     key={inc.id}
                     onClick={() => navigate(`/incidents/${inc.id}`)}
-                    className="grid grid-cols-12 px-4 py-3 hover:bg-ops-750 cursor-pointer transition-colors items-center group"
+                    className={cn("grid grid-cols-12 px-4 hover:bg-ops-750 cursor-pointer transition-colors items-center group", compact ? "py-1.5" : "py-3")}
                   >
                     {/* Title + system + time */}
                     <div className="col-span-5 flex items-start gap-2.5 min-w-0">
@@ -138,7 +175,7 @@ export default function Incidents() {
                             {timeAgo(inc.createdAt)}
                           </span>
                         </div>
-                        {inc.tags.length > 0 && (
+                        {!compact && inc.tags.length > 0 && (
                           <div className="flex gap-1 mt-1 flex-wrap">
                             {inc.tags.slice(0, 3).map((t) => (
                               <span key={t} className="px-1.5 py-0.5 bg-ops-700 text-slate-500 text-xs rounded">
@@ -187,10 +224,10 @@ export default function Incidents() {
             </>
           )}
         </CardBody>
-      </Card>
+      </Card>}
 
-      {/* Pagination */}
-      {total > limit && (
+      {/* Pagination — only in list view */}
+      {view === "list" && total > limit && (
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span>
             Mostrando {(page - 1) * limit + 1}–{Math.min(page * limit, total)} de {total}

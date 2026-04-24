@@ -1,17 +1,22 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, AlertTriangle, Zap, BookOpen,
-  ClipboardList, Settings, ChevronRight, ChevronLeft, Shield,
+  ClipboardList, Settings, ChevronRight, Shield,
   Server, Users, KeyRound, Lock, PanelLeftClose, PanelLeftOpen,
+  Bell,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuthStore, useSidebarStore } from "../../store/useStore";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../lib/api";
+import type { DashboardSummary } from "../../types";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { to: "/systems", icon: Server, label: "Sistemas" },
-  { to: "/incidents", icon: AlertTriangle, label: "Incidencias" },
+  { to: "/incidents", icon: AlertTriangle, label: "Incidencias", badge: "incidents" as const },
+  { to: "/alerts", icon: Bell, label: "Alertas", badge: "alerts" as const },
   { to: "/automations", icon: Zap, label: "Automatizaciones" },
   { to: "/kb", icon: BookOpen, label: "Base de Conocimiento" },
   { to: "/audit", icon: ClipboardList, label: "Auditoría" },
@@ -25,6 +30,19 @@ export function Sidebar() {
 
   const isAdmin = user?.role === "admin";
   const inSettings = location.pathname.startsWith("/settings");
+
+  // Shared cache with TopBar — no extra requests
+  const { data: summary } = useQuery<DashboardSummary>({
+    queryKey: ["dashboard-summary"],
+    queryFn: () => api.get("/dashboard/summary").then((r) => r.data),
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+
+  const badgeCount: Record<string, number> = {
+    incidents: summary?.incidents.open ?? 0,
+    alerts: summary?.alerts.critical ?? 0,
+  };
 
   return (
     <aside
@@ -53,36 +71,51 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ to, icon: Icon, label, exact }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={exact}
-            title={collapsed ? label : undefined}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors group border",
-                collapsed && "justify-center",
-                isActive
-                  ? "bg-accent/10 text-accent border-accent/20"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-ops-700 border-transparent",
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  className={cn(
-                    "w-4 h-4 flex-shrink-0",
-                    isActive ? "text-accent" : "text-slate-500 group-hover:text-slate-300",
+        {navItems.map(({ to, icon: Icon, label, exact, badge }) => {
+          const count = badge ? (badgeCount[badge] ?? 0) : 0;
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={exact}
+              title={collapsed ? label : undefined}
+              className={({ isActive }) =>
+                cn(
+                  "relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors group border",
+                  collapsed && "justify-center",
+                  isActive
+                    ? "bg-accent/10 text-accent border-accent/20"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-ops-700 border-transparent",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={cn(
+                      "w-4 h-4 flex-shrink-0",
+                      isActive ? "text-accent" : "text-slate-500 group-hover:text-slate-300",
+                    )}
+                  />
+                  {/* Collapsed dot badge */}
+                  {collapsed && count > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                   )}
-                />
-                {!collapsed && <span className="flex-1">{label}</span>}
-                {!collapsed && isActive && <ChevronRight className="w-3 h-3 text-accent/50" />}
-              </>
-            )}
-          </NavLink>
-        ))}
+                  {!collapsed && <span className="flex-1">{label}</span>}
+                  {/* Expanded count badge */}
+                  {!collapsed && count > 0 && (
+                    <span className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-500/20 text-red-400 text-xs font-bold border border-red-500/30 animate-pulse">
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  )}
+                  {!collapsed && isActive && count === 0 && (
+                    <ChevronRight className="w-3 h-3 text-accent/50" />
+                  )}
+                </>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* Bottom: settings + user + collapse toggle */}

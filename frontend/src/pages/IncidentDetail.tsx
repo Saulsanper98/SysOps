@@ -10,9 +10,10 @@ import { Input, Textarea } from "../components/ui/Input";
 import { Dialog } from "../components/ui/Dialog";
 import { SeverityDot } from "../components/ui/StatusDot";
 import {
-  ArrowLeft, CheckSquare, Square, MessageSquare, Clock,
+  ArrowLeft, CheckSquare, Square, Clock,
   User, Zap, BookOpen, X, Check, AlertCircle
 } from "lucide-react";
+import { Breadcrumb } from "../components/ui/Breadcrumb";
 import {
   severityColor, severityLabel, incidentStatusColor,
   incidentStatusLabel, timeAgo, formatDate, cn
@@ -104,9 +105,27 @@ export default function IncidentDetail() {
   const totalItems = inc.checklist?.length ?? 0;
   const isClosed = inc.status === "cerrada" || inc.status === "resuelta";
 
+  const severityGradient: Record<string, string> = {
+    critica: "from-red-500/10 to-transparent",
+    alta:    "from-orange-500/8 to-transparent",
+    media:   "from-amber-500/8 to-transparent",
+    baja:    "from-blue-500/8 to-transparent",
+    info:    "from-slate-500/5 to-transparent",
+  };
+
   return (
-    <div className="p-5 space-y-4 animate-fade-in max-w-5xl">
-      {/* Back + title */}
+    <div className={cn("p-5 space-y-4 animate-fade-in max-w-5xl bg-gradient-to-b", severityGradient[inc.severity] ?? "")}>
+      {/* Breadcrumb + back */}
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <Breadcrumb items={[
+            { label: "Dashboard", to: "/" },
+            { label: "Incidencias", to: "/incidents" },
+            { label: inc.title },
+          ]} />
+        </div>
+      </div>
+      {/* Title row */}
       <div className="flex items-start gap-4">
         <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate("/incidents")}>
           Volver
