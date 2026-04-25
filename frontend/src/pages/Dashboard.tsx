@@ -31,7 +31,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data: summary, isLoading, isFetching } = useQuery<DashboardSummary>({
+  const { data: summary, isLoading, isFetching, isError, error } = useQuery<DashboardSummary>({
     queryKey: ["dashboard-summary"],
     queryFn: () => api.get("/dashboard/summary").then((r) => r.data),
     refetchInterval: 60000,
@@ -58,7 +58,32 @@ export default function Dashboard() {
 
   if (isLoading) return <DashboardSkeleton />;
 
-  const s = summary!;
+  if (!summary || isError) {
+    return (
+      <div className="p-5">
+        <Card>
+          <CardBody className="py-10 text-center">
+            <p className="text-sm text-slate-300">No se pudo cargar el dashboard.</p>
+            <p className="text-xs text-slate-500 mt-1">
+              {(error as Error | undefined)?.message ?? "Respuesta de API incompleta"}
+            </p>
+            <div className="mt-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />}
+                onClick={handleRefresh}
+              >
+                Reintentar
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
+  const s = summary;
   const criticalSystems = systems?.filter((sys) => sys.status === "critico") ?? [];
   const degradedSystems = systems?.filter((sys) => sys.status === "degradado") ?? [];
 

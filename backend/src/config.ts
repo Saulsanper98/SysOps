@@ -7,8 +7,8 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-  PORT: z.coerce.number().default(3001),
-  FRONTEND_URL: z.string().default("http://localhost:5173"),
+  PORT: z.coerce.number().default(3012),
+  FRONTEND_URL: z.string().default("http://localhost:5183"),
 
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 chars"),
   JWT_EXPIRES_IN: z.string().default("8h"),

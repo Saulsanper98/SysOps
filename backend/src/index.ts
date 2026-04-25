@@ -36,7 +36,14 @@ async function bootstrap() {
   });
 
   await app.register(fastifyCors, {
-    origin: [config.FRONTEND_URL, "http://localhost:5173", "http://localhost:80"],
+    origin: (origin, cb) => {
+      // Allow desktop launcher/webview requests that may send no origin or Origin: null
+      if (!origin || origin === "null") return cb(null, true);
+
+      const allowed = new Set([config.FRONTEND_URL, "http://localhost:5173", "http://localhost:80"]);
+      if (allowed.has(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"), false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });

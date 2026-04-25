@@ -1,6 +1,19 @@
 import axios from "axios";
 
-const BASE = import.meta.env.VITE_API_URL ?? "";
+function resolveApiBase() {
+  const configured = (import.meta.env.VITE_API_URL ?? "").trim();
+  if (configured) return configured.replace(/\/$/, "");
+
+  // Desktop launchers often load the UI via file://.
+  // In that case, force the local backend default.
+  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+    return "http://localhost:3012";
+  }
+
+  return "";
+}
+
+const BASE = resolveApiBase();
 
 export const api = axios.create({
   baseURL: `${BASE}/api`,

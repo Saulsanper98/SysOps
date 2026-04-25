@@ -23,7 +23,7 @@ function getOrCreateWs(token: string): WebSocket {
   if (_ws && _ws.readyState <= 1) return _ws;
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.hostname;
-  const port = import.meta.env.DEV ? "3002" : window.location.port;
+  const port = import.meta.env.DEV ? "3012" : window.location.port;
   _ws = new WebSocket(`${proto}://${host}:${port}/ws?token=${encodeURIComponent(token)}`);
   (window as any).__sysops_ws = _ws;
   return _ws;

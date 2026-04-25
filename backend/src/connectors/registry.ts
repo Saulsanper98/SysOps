@@ -23,10 +23,28 @@ export interface ConnectorResult {
 
 class ConnectorRegistry {
   private connectors: Map<string, BaseConnector> = new Map();
+  private static readonly CONNECTOR_TIMEOUT_MS = 5000;
+  private static readonly CACHE_TTL_MS = 30000;
+  private disabledStatusWrites = new Set<string>();
+  private healthCache: { ts: number; data: ConnectorResult[] } | null = null;
+  private alertsCache: { ts: number; data: AlertSummary[] } | null = null;
+  private systemsCache: { ts: number; data: SystemStatus[] } | null = null;
+  private inflightHealth: Promise<ConnectorResult[]> | null = null;
+  private inflightAlerts: Promise<AlertSummary[]> | null = null;
+  private inflightSystems: Promise<SystemStatus[]> | null = null;
+
+  private withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = ConnectorRegistry.CONNECTOR_TIMEOUT_MS): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        setTimeout(() => reject(new Error(`${label} timeout (${timeoutMs}ms)`)), timeoutMs);
+      }),
+    ]);
+  }
 
   init() {
     if (config.DEMO_MODE) {
-      const types = ["zabbix", "uptime_kuma", "proxmox", "vcenter", "portainer", "nas"] as const;
+      const types = ["zabbix", "uptime_kuma", "proxmox", "vcenter", "portainer", "nas", "hikvision"] as const;
       const names: Record<string, string> = {
         zabbix: "Zabbix",
         uptime_kuma: "Uptime Kuma",
@@ -34,6 +52,7 @@ class ConnectorRegistry {
         vcenter: "VMware vCenter",
         portainer: "Portainer",
         nas: "NAS/Almacenamiento",
+        hikvision: "Hikvision NVR",
       };
       for (const t of types) {
         this.connectors.set(t, new MockConnector(t, names[t]));
@@ -55,75 +74,141 @@ class ConnectorRegistry {
   }
 
   async checkAll(): Promise<ConnectorResult[]> {
+    if (this.healthCache && Date.now() - this.healthCache.ts < ConnectorRegistry.CACHE_TTL_MS) {
+      return this.healthCache.data;
+    }
+    if (this.inflightHealth) return this.inflightHealth;
+
     const entries = [...this.connectors.entries()];
+    this.inflightHealth = (async () => {
+      const results = await Promise.all(
+        entries.map(async ([type, connector]) => {
+          const start = Date.now();
+          let health: ConnectorHealth;
 
-    const results = await Promise.all(
-      entries.map(async ([type, connector]) => {
-        const start = Date.now();
-        let health: ConnectorHealth;
+          try {
+            health = await this.withTimeout(
+              connector.healthCheck(),
+              `${connector.displayName} healthCheck`,
+            );
+          } catch (err: any) {
+            health = { healthy: false, error: err.message, latencyMs: Date.now() - start };
+          }
 
-        try {
-          health = await Promise.race([
-            connector.healthCheck(),
-            new Promise<ConnectorHealth>((_, rej) =>
-              setTimeout(() => rej(new Error("Timeout (5s)")), 5000),
-            ),
-          ]);
-        } catch (err: any) {
-          health = { healthy: false, error: err.message, latencyMs: Date.now() - start };
-        }
+          if (!this.disabledStatusWrites.has(type)) {
+            try {
+              await db
+                .insert(schema.connectorStatus)
+                .values({
+                  type: type as any,
+                  name: connector.displayName,
+                  healthy: health.healthy,
+                  lastCheck: new Date(),
+                  lastError: health.error ?? null,
+                  latencyMs: health.latencyMs ?? null,
+                })
+                .onConflictDoUpdate({
+                  target: schema.connectorStatus.type,
+                  set: {
+                    healthy: health.healthy,
+                    lastCheck: new Date(),
+                    lastError: health.error ?? null,
+                    latencyMs: health.latencyMs ?? null,
+                    updatedAt: new Date(),
+                  },
+                });
+            } catch (e: any) {
+              const pgCode = e?.cause?.code ?? e?.code;
+              if (pgCode === "22P02") {
+                this.disabledStatusWrites.add(type);
+                logger.warn({ type, pgCode }, "Connector status writes disabled for unsupported enum value");
+              } else {
+                logger.warn({ e }, "Failed to update connector status");
+              }
+            }
+          }
 
-        await db
-          .insert(schema.connectorStatus)
-          .values({
-            type: type as any,
-            name: connector.displayName,
-            healthy: health.healthy,
-            lastCheck: new Date(),
-            lastError: health.error ?? null,
-            latencyMs: health.latencyMs ?? null,
-          })
-          .onConflictDoUpdate({
-            target: schema.connectorStatus.type,
-            set: {
-              healthy: health.healthy,
-              lastCheck: new Date(),
-              lastError: health.error ?? null,
-              latencyMs: health.latencyMs ?? null,
-              updatedAt: new Date(),
-            },
-          })
-          .catch((e) => logger.warn({ e }, "Failed to update connector status"));
+          return {
+            type,
+            displayName: connector.displayName,
+            ...health,
+          } as ConnectorResult;
+        }),
+      );
 
-        return {
-          type,
-          displayName: connector.displayName,
-          ...health,
-        } as ConnectorResult;
-      }),
-    );
+      this.healthCache = { ts: Date.now(), data: results };
+      return results;
+    })();
 
-    return results;
+    try {
+      return await this.inflightHealth;
+    } finally {
+      this.inflightHealth = null;
+    }
   }
 
   async getAllAlerts(): Promise<AlertSummary[]> {
     if (config.DEMO_MODE) return mockAlerts;
+    if (this.alertsCache && Date.now() - this.alertsCache.ts < ConnectorRegistry.CACHE_TTL_MS) {
+      return this.alertsCache.data;
+    }
+    if (this.inflightAlerts) return this.inflightAlerts;
 
-    const all = await Promise.allSettled(
-      [...this.connectors.values()].map((c) => c.getAlerts()),
-    );
+    this.inflightAlerts = (async () => {
+      const all = await Promise.allSettled(
+        [...this.connectors.values()].map((c) =>
+          this.withTimeout(c.getAlerts(), `${c.displayName} getAlerts`),
+        ),
+      );
 
-    return all.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      for (const r of all) {
+        if (r.status === "rejected") {
+          logger.warn({ error: r.reason?.message ?? String(r.reason) }, "Connector getAlerts failed");
+        }
+      }
+
+      const merged = all.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      this.alertsCache = { ts: Date.now(), data: merged };
+      return merged;
+    })();
+
+    try {
+      return await this.inflightAlerts;
+    } finally {
+      this.inflightAlerts = null;
+    }
   }
 
   async getAllSystems(): Promise<SystemStatus[]> {
     if (config.DEMO_MODE) return mockSystems;
+    if (this.systemsCache && Date.now() - this.systemsCache.ts < ConnectorRegistry.CACHE_TTL_MS) {
+      return this.systemsCache.data;
+    }
+    if (this.inflightSystems) return this.inflightSystems;
 
-    const all = await Promise.allSettled(
-      [...this.connectors.values()].map((c) => c.getSystems()),
-    );
+    this.inflightSystems = (async () => {
+      const all = await Promise.allSettled(
+        [...this.connectors.values()].map((c) =>
+          this.withTimeout(c.getSystems(), `${c.displayName} getSystems`),
+        ),
+      );
 
-    return all.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      for (const r of all) {
+        if (r.status === "rejected") {
+          logger.warn({ error: r.reason?.message ?? String(r.reason) }, "Connector getSystems failed");
+        }
+      }
+
+      const merged = all.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      this.systemsCache = { ts: Date.now(), data: merged };
+      return merged;
+    })();
+
+    try {
+      return await this.inflightSystems;
+    } finally {
+      this.inflightSystems = null;
+    }
   }
 
   get(type: string): BaseConnector | undefined {

@@ -92,6 +92,15 @@ export const mockAlerts: AlertSummary[] = [
     firedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
     metadata: { source: "nas" },
   },
+  {
+    externalId: "hik-001",
+    title: "Disco NVR con errores SMART (HDD-2)",
+    description: "El almacenamiento del grabador reporta advertencia en unidad interna",
+    severity: "alta",
+    systemName: "NVR-EDIFICIO-A",
+    firedAt: new Date(Date.now() - 35 * 60 * 1000),
+    metadata: { source: "hikvision" },
+  },
 ];
 
 export const mockSystems: SystemStatus[] = [
@@ -110,4 +119,5 @@ export const mockSystems: SystemStatus[] = [
   { externalId: "s13", name: "NAS-01", type: "storage", status: "degradado", metadata: { source: "nas" } },
   { externalId: "s14", name: "nginx-proxy", type: "container", status: "critico", metadata: { source: "portainer" } },
   { externalId: "s15", name: "redis-cache", type: "container", status: "ok", metadata: { source: "portainer" } },
+  { externalId: "s16", name: "NVR-EDIFICIO-A", type: "nvr", status: "degradado", metadata: { source: "hikvision", model: "DS-7616NI-K2" } },
 ];

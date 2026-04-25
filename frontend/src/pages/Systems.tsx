@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "../components/ui/Dialog";
 import { api } from "../lib/api";
@@ -127,6 +127,32 @@ function SystemDetailDialog({ system, onClose }: { system: SystemStatusItem; onC
   );
 }
 
+function prettyMetaLabel(key: string) {
+  const map: Record<string, string> = {
+    source: "Fuente",
+    host: "Host",
+    model: "Modelo",
+    firmware: "Firmware",
+    endpoint: "Endpoint",
+    node: "Nodo",
+    vmid: "VMID",
+    powerState: "Estado energía",
+    channels: "Canales",
+    image: "Imagen",
+    state: "Estado",
+    status: "Status",
+  };
+  return map[key] ?? key.replace(/([A-Z])/g, " $1").trim();
+}
+
+function compactMeta(system: SystemStatusItem) {
+  const meta = system.metadata ?? {};
+  const keys = ["source", "host", "model", "firmware", "endpoint", "node", "vmid", "powerState", "channels"];
+  return keys
+    .filter((k) => meta[k] !== undefined && meta[k] !== null && String(meta[k]).trim() !== "")
+    .map((k) => ({ key: k, value: String(meta[k]) }));
+}
+
 function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: () => void }) {
   const cpu = system.metrics?.cpu;
   const memory = system.metrics?.memory;
@@ -136,9 +162,8 @@ function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: 
   const memColor = (memory ?? 0) > 90 ? "text-red-400" : (memory ?? 0) > 70 ? "text-amber-400" : "text-emerald-400";
   const diskColor = (disk ?? 0) > 90 ? "text-red-400" : (disk ?? 0) > 70 ? "text-amber-400" : "text-emerald-400";
 
-  const powerState = system.metadata?.powerState as string | undefined;
-  const image = system.metadata?.image as string | undefined;
   const source = system.metadata?.source as string | undefined;
+  const details = compactMeta(system).slice(0, 3);
 
   return (
     <Card hover onClick={onSelect} className="flex flex-col gap-3 p-4 cursor-pointer">
@@ -174,18 +199,13 @@ function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: 
       )}
 
       {/* Metadata badges */}
-      {(powerState || image) && (
+      {details.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {powerState && (
+          {details.map((d) => (
             <span className="text-xs px-2 py-0.5 bg-ops-700 text-slate-400 rounded">
-              {powerState}
+              {prettyMetaLabel(d.key)}: {d.value}
             </span>
-          )}
-          {image && (
-            <span className="text-xs px-2 py-0.5 bg-ops-700 text-slate-400 rounded truncate max-w-full">
-              {image}
-            </span>
-          )}
+          ))}
         </div>
       )}
     </Card>
@@ -197,6 +217,23 @@ export default function Systems() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<SystemStatusItem | null>(null);
+  const [aliases, setAliases] = useState<Record<string, string>>({});
+  const [editingAliasId, setEditingAliasId] = useState<string | null>(null);
+  const [aliasDraft, setAliasDraft] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("sysops_system_aliases");
+      if (raw) setAliases(JSON.parse(raw));
+    } catch {
+      // ignore storage parsing issues
+    }
+  }, []);
+
+  const saveAliases = (next: Record<string, string>) => {
+    setAliases(next);
+    localStorage.setItem("sysops_system_aliases", JSON.stringify(next));
+  };
 
   const { data: systems, isLoading, refetch, isFetching } = useQuery<SystemStatusItem[]>({
     queryKey: ["dashboard-systems"],
@@ -205,8 +242,18 @@ export default function Systems() {
     staleTime: 15000,
   });
 
-  const filtered = (systems ?? []).filter((s) => {
-    if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
+  const systemsWithAlias = useMemo(
+    () =>
+      (systems ?? []).map((s) => ({
+        ...s,
+        displayName: aliases[s.externalId]?.trim() || s.name,
+      })),
+    [systems, aliases],
+  );
+
+  const filtered = systemsWithAlias.filter((s) => {
+    const haystack = `${s.displayName} ${s.name}`.toLowerCase();
+    if (search && !haystack.includes(search.toLowerCase())) return false;
     if (typeFilter && s.type !== typeFilter) return false;
     if (statusFilter && s.status !== statusFilter) return false;
     return true;
@@ -224,7 +271,7 @@ export default function Systems() {
         <div>
           <h1 className="text-lg font-bold text-slate-100">Sistemas</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            {systems?.length ?? 0} sistemas monitorizados
+            {systemsWithAlias.length ?? 0} sistemas monitorizados
             {statusCounts.critico ? ` · ${statusCounts.critico} críticos` : ""}
             {statusCounts.degradado ? ` · ${statusCounts.degradado} degradados` : ""}
           </p>
@@ -262,7 +309,7 @@ export default function Systems() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-48">
           <Input
-            placeholder="Buscar por nombre..."
+            placeholder="Buscar por nombre o alias..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             icon={<Search className="w-3.5 h-3.5" />}
@@ -301,14 +348,62 @@ export default function Systems() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((sys) => (
-            <SystemCard key={sys.externalId} system={sys} onSelect={() => setSelectedSystem(sys)} />
+            <div key={sys.externalId} className="space-y-1.5">
+              <SystemCard
+                system={{ ...sys, name: (sys as any).displayName }}
+                onSelect={() => setSelectedSystem({ ...sys, name: (sys as any).displayName })}
+              />
+              <div className="px-1 flex items-center gap-2">
+                {editingAliasId === sys.externalId ? (
+                  <>
+                    <Input
+                      value={aliasDraft}
+                      onChange={(e) => setAliasDraft(e.target.value)}
+                      placeholder="Alias local"
+                    />
+                    <Button
+                      size="xs"
+                      onClick={() => {
+                        const value = aliasDraft.trim();
+                        const next = { ...aliases };
+                        if (!value || value === sys.name) delete next[sys.externalId];
+                        else next[sys.externalId] = value;
+                        saveAliases(next);
+                        setEditingAliasId(null);
+                      }}
+                    >
+                      Guardar
+                    </Button>
+                    <Button variant="ghost" size="xs" onClick={() => setEditingAliasId(null)}>
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs text-slate-500 truncate">
+                      {aliases[sys.externalId] ? `Alias: ${aliases[sys.externalId]}` : "Sin alias"}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => {
+                        setEditingAliasId(sys.externalId);
+                        setAliasDraft(aliases[sys.externalId] ?? "");
+                      }}
+                    >
+                      Renombrar
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
       {filtered.length > 0 && (
         <p className="text-xs text-slate-600 text-center">
-          Mostrando {filtered.length} de {systems?.length ?? 0} sistemas
+          Mostrando {filtered.length} de {systemsWithAlias.length ?? 0} sistemas
         </p>
       )}
 
