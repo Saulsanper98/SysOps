@@ -11,6 +11,10 @@ import { notificationRoutes } from "./notifications";
 import { scheduledJobRoutes } from "./scheduledJobs";
 import { sshCredentialRoutes } from "./sshCredentials";
 import { metricsRoutes } from "./metrics";
+import { connectorSettingsRoutes } from "./connectorSettings";
+import { ingestRoutes } from "./ingest";
+import { cmdbSystemsRoutes } from "./cmdbSystems";
+import { runbookRoutes } from "./runbooks";
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(async (a) => { await authRoutes(a); }, { prefix: "/api/auth" });
@@ -25,4 +29,8 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(async (a) => { await scheduledJobRoutes(a); }, { prefix: "/api/scheduled-jobs" });
   await app.register(async (a) => { await sshCredentialRoutes(a); }, { prefix: "/api/ssh-credentials" });
   await app.register(async (a) => { await metricsRoutes(a); }, { prefix: "/api/metrics" });
+  await app.register(async (a) => { await connectorSettingsRoutes(a); }, { prefix: "/api/connector-settings" });
+  await app.register(async (a) => { await ingestRoutes(a); }, { prefix: "/api/ingest" });
+  await app.register(async (a) => { await cmdbSystemsRoutes(a); }, { prefix: "/api/cmdb" });
+  await app.register(async (a) => { await runbookRoutes(a); }, { prefix: "/api" });
 }

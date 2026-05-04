@@ -8,8 +8,10 @@
     "start": "node dist/index.js",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "db:setup": "npm run db:push && npm run db:seed",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:prod": "node dist/db/seed.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -41,7 +43,8 @@
     "speakeasy": "^2.0.0",
     "ssh2": "^1.17.0",
     "uuid": "^9.0.1",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "drizzle-kit": "^0.31.10"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -52,7 +55,6 @@
     "@types/ssh2": "^1.15.5",
     "@types/uuid": "^9.0.8",
     "@vitest/coverage-v8": "^1.5.0",
-    "drizzle-kit": "^0.31.10",
     "tsx": "^4.7.2",
     "typescript": "^5.4.5",
     "vitest": "^1.5.0"

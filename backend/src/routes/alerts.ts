@@ -69,6 +69,12 @@ export async function alertRoutes(app: FastifyInstance) {
     return alerts;
   });
 
+  app.get("/:id/correlation-suggestions", { preHandler: requireAuth }, async (req) => {
+    const { id } = req.params as { id: string };
+    const { findSuggestedIncidentsForAlert } = await import("../services/alertIngest");
+    return findSuggestedIncidentsForAlert(id);
+  });
+
   // GET /:id — detail
   app.get("/:id", { preHandler: requireAuth }, async (req) => {
     const { id } = req.params as { id: string };

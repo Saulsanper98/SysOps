@@ -7,6 +7,7 @@ import "./index.css";
 const storedTheme = localStorage.getItem("sysops-theme") ?? "dark";
 document.documentElement.classList.toggle("dark", storedTheme === "dark");
 document.documentElement.classList.toggle("light", storedTheme === "light");
+document.documentElement.style.colorScheme = storedTheme === "dark" ? "dark" : "light";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

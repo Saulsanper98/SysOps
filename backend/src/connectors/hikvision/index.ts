@@ -2,7 +2,7 @@ import axios from "axios";
 import crypto from "crypto";
 import https from "https";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 // ─── HTTP Digest auth helper ──────────────────────────────────────────────────
@@ -50,13 +50,13 @@ export class HikvisionConnector extends BaseConnector {
   private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   private get baseURL() {
-    return (config.HIKVISION_URL ?? "").replace(/\/$/, "");
+    return (dyn.hikvisionUrl() ?? "").replace(/\/$/, "");
   }
 
   private get credentials() {
     return {
-      username: config.HIKVISION_USER ?? "admin",
-      password: config.HIKVISION_PASSWORD ?? "",
+      username: dyn.hikvisionUser() ?? "admin",
+      password: dyn.hikvisionPassword() ?? "",
     };
   }
 

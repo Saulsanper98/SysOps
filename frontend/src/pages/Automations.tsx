@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../lib/api";
 import type { AutomationAction, AutomationRun } from "../types";
@@ -9,13 +9,17 @@ import { Dialog } from "../components/ui/Dialog";
 import { Input } from "../components/ui/Input";
 import {
   Zap, Play, Clock, CheckCircle, XCircle, Loader2,
-  Activity, RefreshCw, Trash2, Camera, Shield, Wifi,
-  AlertTriangle, CalendarClock
+  Activity, RefreshCw, Trash2, Camera, Shield,
+  AlertTriangle, CalendarClock, Search,
 } from "lucide-react";
 import { automationStatusColor, timeAgo, cn } from "../lib/utils";
+import { useAuthStore } from "../store/useStore";
 import type { AutomationStatus, ActionParameter } from "../types";
 import toast from "react-hot-toast";
 import { ScheduledJobsTab } from "../components/automations/ScheduledJobsTab";
+import { AnsiOutput } from "../components/automations/AnsiOutput";
+import { Select } from "../components/ui/Select";
+import { usePreferencesStore } from "../store/useStore";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   "health-check": <Activity className="w-4 h-4" />,
@@ -33,8 +37,22 @@ const categoryColors: Record<string, string> = {
   validate: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
 };
 
+const runStatusFilterOptions = [
+  { value: "", label: "Todos los estados" },
+  { value: "pendiente", label: "Pendiente" },
+  { value: "ejecutando", label: "Ejecutando" },
+  { value: "completada", label: "Completada" },
+  { value: "fallida", label: "Fallida" },
+  { value: "cancelada", label: "Cancelada" },
+];
+
 export default function Automations() {
   const qc = useQueryClient();
+  const { user: currentUser } = useAuthStore();
+  const automationHistoryStatus = usePreferencesStore((s) => s.automationHistoryStatus);
+  const setAutomationHistoryStatus = usePreferencesStore((s) => s.setAutomationHistoryStatus);
+  const automationHistorySearch = usePreferencesStore((s) => s.automationHistorySearch);
+  const setAutomationHistorySearch = usePreferencesStore((s) => s.setAutomationHistorySearch);
   const [executing, setExecuting] = useState<AutomationAction | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
   const [runOutput, setRunOutput] = useState<{ runId: string; open: boolean }>({ runId: "", open: false });
@@ -61,6 +79,15 @@ export default function Automations() {
     },
   });
 
+  const approveRun = useMutation({
+    mutationFn: (runId: string) => api.post(`/automations/runs/${runId}/approve`),
+    onSuccess: () => {
+      toast.success("Ejecución aprobada y encolada");
+      qc.invalidateQueries({ queryKey: ["automation-runs"] });
+    },
+    onError: (err) => toast.error(apiError(err)),
+  });
+
   const executeAction = useMutation({
     mutationFn: ({ actionId, parameters }: { actionId: string; parameters: Record<string, string> }) =>
       api.post(`/automations/actions/${actionId}/run`, { parameters }),
@@ -78,6 +105,24 @@ export default function Automations() {
     (acc[a.category] = acc[a.category] ?? []).push(a);
     return acc;
   }, {});
+
+  const filteredRuns = useMemo(() => {
+    let list = runs ?? [];
+    if (automationHistoryStatus) {
+      list = list.filter((r) => r.status === automationHistoryStatus);
+    }
+    const q = automationHistorySearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (r) =>
+          (r.action?.name ?? "").toLowerCase().includes(q) ||
+          (r.system?.name ?? "").toLowerCase().includes(q) ||
+          (r.triggeredBy?.displayName ?? "").toLowerCase().includes(q) ||
+          r.id.toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [runs, automationHistoryStatus, automationHistorySearch]);
 
   return (
     <div className="p-5 space-y-4 animate-fade-in">
@@ -173,11 +218,30 @@ export default function Automations() {
             </Button>
           </CardHeader>
           <CardBody className="p-0">
+            <div className="flex flex-col sm:flex-row gap-3 px-4 pt-4 pb-2 border-b border-ops-700/50">
+              <div className="flex-1 min-w-0">
+                <Input
+                  placeholder="Buscar por acción, sistema, usuario o id…"
+                  value={automationHistorySearch}
+                  onChange={(e) => setAutomationHistorySearch(e.target.value)}
+                  icon={<Search className="w-3.5 h-3.5" />}
+                />
+              </div>
+              <div className="w-full sm:w-48 shrink-0">
+                <Select
+                  value={automationHistoryStatus}
+                  onChange={(e) => setAutomationHistoryStatus(e.target.value)}
+                  options={runStatusFilterOptions}
+                />
+              </div>
+            </div>
             {!runs?.length ? (
               <div className="py-12 text-center text-slate-600 text-sm">Sin ejecuciones registradas</div>
+            ) : !filteredRuns.length ? (
+              <div className="py-12 text-center text-slate-600 text-sm">Ninguna ejecución coincide con los filtros</div>
             ) : (
               <div className="divide-y divide-ops-700/50">
-                {runs.map((run) => (
+                {filteredRuns.map((run) => (
                   <div
                     key={run.id}
                     onClick={() => setRunOutput({ runId: run.id, open: true })}
@@ -191,8 +255,21 @@ export default function Automations() {
                         {run.system && ` · ${run.system.name}`}
                       </p>
                     </div>
+                    {run.awaitingApproval && currentUser?.id && run.triggeredBy && run.triggeredBy.id !== currentUser.id && (
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        loading={approveRun.isPending}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          approveRun.mutate(run.id);
+                        }}
+                      >
+                        Aprobar
+                      </Button>
+                    )}
                     <Badge className={automationStatusColor[run.status as AutomationStatus]}>
-                      {run.status}
+                      {run.awaitingApproval ? "pendiente aprob." : run.status}
                     </Badge>
                     {run.finishedAt && run.startedAt && (
                       <span className="text-xs text-slate-600 font-mono ml-1">
@@ -272,13 +349,19 @@ export default function Automations() {
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="bg-ops-950 rounded-lg border border-ops-700 p-3 font-mono text-xs text-slate-300 min-h-32 max-h-96 overflow-y-auto whitespace-pre-wrap">
-                {runDetail.output ?? (runDetail.status === "pendiente" || runDetail.status === "ejecutando"
-                  ? "⏳ Esperando salida..."
-                  : "(sin salida)"
+              <div className="bg-ops-950 rounded-lg border border-ops-700 p-3 font-mono text-xs min-h-32 max-h-96 overflow-y-auto">
+                {runDetail.output ? (
+                  <AnsiOutput
+                    text={runDetail.output}
+                    className="whitespace-pre-wrap break-words text-slate-200 [&_span]:font-mono"
+                  />
+                ) : runDetail.status === "pendiente" || runDetail.status === "ejecutando" ? (
+                  <span className="text-slate-500 whitespace-pre-wrap">Esperando salida…</span>
+                ) : (
+                  <span className="text-slate-600 whitespace-pre-wrap">(sin salida)</span>
                 )}
                 {runDetail.error && (
-                  <div className="mt-2 text-red-400">❌ Error: {runDetail.error}</div>
+                  <div className="mt-2 text-red-400 whitespace-pre-wrap">Error: {runDetail.error}</div>
                 )}
               </div>
             </div>

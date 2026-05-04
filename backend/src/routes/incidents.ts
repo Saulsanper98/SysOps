@@ -1,11 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireAuth } from "../auth/middleware";
+import { requireAuth, requireRole } from "../auth/middleware";
 import { db, schema } from "../db";
-import { eq, and, desc, like, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte, or, isNull, notInArray, lt } from "drizzle-orm";
 import { recordAudit } from "../utils/audit";
 import { NotFoundError, ForbiddenError } from "../utils/errors";
 import { notifyNewCriticalIncident } from "../services/notificationService";
+import { computeSlaDeadlines, computeSlaRisk } from "../services/sla";
+import { wsManager } from "../services/wsManager";
+
+function emitOpsRefresh() {
+  wsManager.broadcast({ type: "invalidate", scopes: ["incidents", "dashboard"] });
+}
+
+const terminalStatuses = ["resuelta", "cerrada"] as const;
 
 export async function incidentRoutes(app: FastifyInstance) {
   // List incidents
@@ -15,6 +23,9 @@ export async function incidentRoutes(app: FastifyInstance) {
       severity: z.string().optional(),
       assignedTo: z.string().optional(),
       search: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+      slaRisk: z.enum(["any", "breach", "warning"]).optional(),
       page: z.coerce.number().default(1),
       limit: z.coerce.number().max(100).default(20),
     }).parse(req.query);
@@ -30,11 +41,54 @@ export async function incidentRoutes(app: FastifyInstance) {
         sql`(${schema.incidents.title} ILIKE ${"%" + q.search + "%"} OR ${schema.incidents.description} ILIKE ${"%" + q.search + "%"})`,
       );
     }
+    if (q.dateFrom) {
+      conditions.push(gte(schema.incidents.createdAt, new Date(q.dateFrom)));
+    }
+    if (q.dateTo) {
+      const end = new Date(q.dateTo);
+      end.setHours(23, 59, 59, 999);
+      conditions.push(lte(schema.incidents.createdAt, end));
+    }
+
+    const now = new Date();
+    const warnUntil = new Date(now.getTime() + 60 * 60 * 1000);
+
+    if (q.slaRisk && q.slaRisk !== "any") {
+      if (q.slaRisk === "breach") {
+        conditions.push(
+          or(
+            and(
+              isNull(schema.incidents.firstResponseAt),
+              lt(schema.incidents.slaResponseDueAt, now),
+              notInArray(schema.incidents.status, [...terminalStatuses]),
+            )!,
+            and(lt(schema.incidents.slaResolutionDueAt, now), notInArray(schema.incidents.status, [...terminalStatuses]))!,
+          )!,
+        );
+      } else if (q.slaRisk === "warning") {
+        conditions.push(
+          and(
+            notInArray(schema.incidents.status, [...terminalStatuses]),
+            or(
+              and(
+                isNull(schema.incidents.firstResponseAt),
+                gte(schema.incidents.slaResponseDueAt, now),
+                lte(schema.incidents.slaResponseDueAt, warnUntil),
+              )!,
+              and(
+                gte(schema.incidents.slaResolutionDueAt, now),
+                lte(schema.incidents.slaResolutionDueAt, warnUntil),
+              )!,
+            )!,
+          )!,
+        );
+      }
+    }
 
     const offset = (q.page - 1) * q.limit;
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
-    const [incidents, totalResult] = await Promise.all([
+    const [incidentRows, totalResult] = await Promise.all([
       db
         .select({
           id: schema.incidents.id,
@@ -45,6 +99,9 @@ export async function incidentRoutes(app: FastifyInstance) {
           createdAt: schema.incidents.createdAt,
           updatedAt: schema.incidents.updatedAt,
           resolvedAt: schema.incidents.resolvedAt,
+          firstResponseAt: schema.incidents.firstResponseAt,
+          slaResponseDueAt: schema.incidents.slaResponseDueAt,
+          slaResolutionDueAt: schema.incidents.slaResolutionDueAt,
           assignedUser: {
             id: schema.users.id,
             displayName: schema.users.displayName,
@@ -78,12 +135,84 @@ export async function incidentRoutes(app: FastifyInstance) {
         .where(whereClause),
     ]);
 
+    const data = incidentRows.map((row) => ({
+      ...row,
+      slaRisk: computeSlaRisk(
+        {
+          status: row.status,
+          firstResponseAt: row.firstResponseAt,
+          slaResponseDueAt: row.slaResponseDueAt,
+          slaResolutionDueAt: row.slaResolutionDueAt,
+        },
+        now,
+      ),
+    }));
+
     return {
-      data: incidents,
+      data,
       total: Number(totalResult[0]?.count ?? 0),
       page: q.page,
       limit: q.limit,
     };
+  });
+
+  app.patch("/bulk", { preHandler: requireRole("admin", "tecnico") }, async (req) => {
+    const body = z
+      .object({
+        ids: z.array(z.string().uuid()).min(1).max(100),
+        status: z.enum(["abierta", "en_progreso", "pendiente", "resuelta", "cerrada"]).optional(),
+        assignedTo: z.string().uuid().nullable().optional(),
+      })
+      .parse(req.body);
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.status !== undefined) updates.status = body.status;
+    if (body.assignedTo !== undefined) updates.assignedTo = body.assignedTo;
+    if (body.status === undefined && body.assignedTo === undefined) {
+      throw new ForbiddenError("Indica status y/o assignedTo");
+    }
+
+    if (body.status === "resuelta") updates.resolvedAt = new Date();
+    if (body.status === "cerrada") updates.closedAt = new Date();
+
+    await db
+      .update(schema.incidents)
+      .set(updates as any)
+      .where(inArray(schema.incidents.id, body.ids));
+
+    if (body.assignedTo) {
+      for (const id of body.ids) {
+        await db.insert(schema.incidentComments).values({
+          incidentId: id,
+          authorId: req.user.sub,
+          content: `Asignación masiva por ${req.user.displayName}`,
+          isSystemMessage: true,
+        });
+      }
+    } else if (body.status) {
+      for (const id of body.ids) {
+        await db.insert(schema.incidentComments).values({
+          incidentId: id,
+          authorId: req.user.sub,
+          content: `Estado actualizado masivamente a "${body.status}" por ${req.user.displayName}`,
+          isSystemMessage: true,
+        });
+      }
+    }
+
+    await recordAudit({
+      userId: req.user.sub,
+      action: "update",
+      entityType: "incident",
+      entityId: body.ids.join(","),
+      entityName: "bulk",
+      description: `Actualización masiva de ${body.ids.length} incidencias`,
+      metadata: body,
+      req,
+    });
+
+    emitOpsRefresh();
+    return { ok: true, updated: body.ids.length };
   });
 
   // Get incident detail
@@ -153,8 +282,19 @@ export async function incidentRoutes(app: FastifyInstance) {
           : Promise.resolve([]),
       ]);
 
+    const slaRisk = computeSlaRisk(
+      {
+        status: incident.status,
+        firstResponseAt: incident.firstResponseAt,
+        slaResponseDueAt: incident.slaResponseDueAt,
+        slaResolutionDueAt: incident.slaResolutionDueAt,
+      },
+      new Date(),
+    );
+
     return {
       ...incident,
+      slaRisk,
       checklist,
       comments,
       linkedAlertIds: linkedAlerts.map((a) => a.alertId),
@@ -178,10 +318,19 @@ export async function incidentRoutes(app: FastifyInstance) {
     }).parse(req.body);
 
     const { checklist: checklistItems, ...incidentData } = body;
+    const createdAt = new Date();
+    const sla = computeSlaDeadlines(incidentData.severity, createdAt);
 
     const [incident] = await db
       .insert(schema.incidents)
-      .values({ ...incidentData, createdBy: req.user.sub })
+      .values({
+        ...incidentData,
+        createdBy: req.user.sub,
+        createdAt,
+        slaResponseDueAt: sla.slaResponseDueAt,
+        slaResolutionDueAt: sla.slaResolutionDueAt,
+        firstResponseAt: body.assignedTo ? createdAt : null,
+      })
       .returning();
 
     if (checklistItems.length) {
@@ -224,6 +373,7 @@ export async function incidentRoutes(app: FastifyInstance) {
       });
     }
 
+    emitOpsRefresh();
     return reply.status(201).send(incident);
   });
 
@@ -248,6 +398,22 @@ export async function incidentRoutes(app: FastifyInstance) {
     const updates: any = { ...body, updatedAt: new Date() };
     if (body.status === "resuelta" && !before.resolvedAt) updates.resolvedAt = new Date();
     if (body.status === "cerrada" && !before.closedAt) updates.closedAt = new Date();
+
+    if (body.severity && body.severity !== before.severity && ["abierta", "pendiente"].includes(before.status)) {
+      const base = before.firstResponseAt ?? before.createdAt;
+      const sla = computeSlaDeadlines(body.severity, base instanceof Date ? base : new Date(base));
+      updates.slaResponseDueAt = sla.slaResponseDueAt;
+      updates.slaResolutionDueAt = sla.slaResolutionDueAt;
+    }
+
+    if (!before.firstResponseAt) {
+      if (body.status === "en_progreso" && before.status !== "en_progreso") {
+        updates.firstResponseAt = new Date();
+      }
+      if (body.assignedTo !== undefined && body.assignedTo !== null && body.assignedTo !== before.assignedTo) {
+        updates.firstResponseAt = new Date();
+      }
+    }
 
     const [updated] = await db
       .update(schema.incidents)
@@ -275,6 +441,7 @@ export async function incidentRoutes(app: FastifyInstance) {
       req,
     });
 
+    emitOpsRefresh();
     return updated;
   });
 
@@ -317,6 +484,7 @@ export async function incidentRoutes(app: FastifyInstance) {
           autoGenerated: true,
           createdBy: req.user.sub,
           updatedBy: req.user.sub,
+          version: 1,
         })
         .returning();
 
@@ -341,6 +509,7 @@ export async function incidentRoutes(app: FastifyInstance) {
       req,
     });
 
+    emitOpsRefresh();
     return reply.send({ incident: closed, kbArticle });
   });
 
@@ -351,9 +520,20 @@ export async function incidentRoutes(app: FastifyInstance) {
 
     const [comment] = await db
       .insert(schema.incidentComments)
-      .values({ incidentId: id, authorId: req.user.sub, content })
+      .values({ incidentId: id, authorId: req.user.sub, content, isSystemMessage: false })
       .returning();
 
+    {
+      const [inc] = await db.select().from(schema.incidents).where(eq(schema.incidents.id, id)).limit(1);
+      if (inc && !inc.firstResponseAt) {
+        await db
+          .update(schema.incidents)
+          .set({ firstResponseAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.incidents.id, id));
+      }
+    }
+
+    emitOpsRefresh();
     return reply.status(201).send(comment);
   });
 
@@ -372,6 +552,7 @@ export async function incidentRoutes(app: FastifyInstance) {
       .where(and(eq(schema.checklistItems.id, itemId), eq(schema.checklistItems.incidentId, id)))
       .returning();
 
+    emitOpsRefresh();
     return item;
   });
 
@@ -380,18 +561,29 @@ export async function incidentRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { userId } = z.object({ userId: z.string().uuid() }).parse(req.body);
 
-    const [before] = await db.select({ assignedTo: schema.incidents.assignedTo, title: schema.incidents.title })
-      .from(schema.incidents).where(eq(schema.incidents.id, id)).limit(1);
+    const [before] = await db
+      .select({ assignedTo: schema.incidents.assignedTo, title: schema.incidents.title, firstResponseAt: schema.incidents.firstResponseAt })
+      .from(schema.incidents)
+      .where(eq(schema.incidents.id, id))
+      .limit(1);
     if (!before) throw new NotFoundError("Incidencia");
 
     const [updated] = await db
       .update(schema.incidents)
-      .set({ assignedTo: userId, status: "en_progreso", updatedAt: new Date() })
+      .set({
+        assignedTo: userId,
+        status: "en_progreso",
+        updatedAt: new Date(),
+        firstResponseAt: before.firstResponseAt ?? new Date(),
+      })
       .where(eq(schema.incidents.id, id))
       .returning();
 
-    const [assignedUser] = await db.select({ displayName: schema.users.displayName })
-      .from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+    const [assignedUser] = await db
+      .select({ displayName: schema.users.displayName })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
 
     await db.insert(schema.incidentComments).values({
       incidentId: id,
@@ -410,6 +602,7 @@ export async function incidentRoutes(app: FastifyInstance) {
       req,
     });
 
+    emitOpsRefresh();
     return updated;
   });
 }

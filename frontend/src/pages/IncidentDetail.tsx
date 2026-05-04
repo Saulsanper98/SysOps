@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../lib/api";
@@ -8,6 +8,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Input, Textarea } from "../components/ui/Input";
 import { Dialog } from "../components/ui/Dialog";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { SeverityDot } from "../components/ui/StatusDot";
 import {
   ArrowLeft, CheckSquare, Square, Clock,
@@ -30,7 +31,9 @@ export default function IncidentDetail() {
   const { user: currentUser } = useAuthStore();
   const [comment, setComment] = useState("");
   const [showClose, setShowClose] = useState(false);
+  const [takeConfirmOpen, setTakeConfirmOpen] = useState(false);
   const [rca, setRca] = useState({ rootCause: "", resolution: "" });
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "user" | "system">("all");
 
   const { data: inc, isLoading } = useQuery<Incident>({
     queryKey: ["incident", id],
@@ -99,6 +102,15 @@ export default function IncidentDetail() {
     onError: (err) => toast.error(apiError(err)),
   });
 
+  // Debe ejecutarse en todo render (antes de cualquier return): scroll a #hash cuando ya hay DOM.
+  useEffect(() => {
+    if (isLoading || !inc) return;
+    const h = window.location.hash.replace("#", "");
+    if (!h) return;
+    const el = document.getElementById(h);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [id, isLoading, inc?.id]);
+
   if (isLoading || !inc) {
     return (
       <div className="p-5">
@@ -113,6 +125,12 @@ export default function IncidentDetail() {
   const completedItems = inc.checklist?.filter((i) => i.completed).length ?? 0;
   const totalItems = inc.checklist?.length ?? 0;
   const isClosed = inc.status === "cerrada" || inc.status === "resuelta";
+
+  const filteredComments = (inc.comments ?? []).filter((c) => {
+    if (timelineFilter === "all") return true;
+    if (timelineFilter === "user") return !c.isSystemMessage;
+    return c.isSystemMessage;
+  });
 
   const severityGradient: Record<string, string> = {
     critica: "from-red-500/10 to-transparent",
@@ -168,7 +186,11 @@ export default function IncidentDetail() {
               </Button>
             )}
             {inc.status === "abierta" && (
-              <Button variant="secondary" size="sm" onClick={() => updateStatus.mutate("en_progreso")}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTakeConfirmOpen(true)}
+              >
                 Tomar
               </Button>
             )}
@@ -179,15 +201,21 @@ export default function IncidentDetail() {
         )}
       </div>
 
+      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Secciones de la incidencia">
+        {inc.description && <a href="#incident-section-descripcion" className="hover:text-accent">Descripción</a>}
+        {(inc.checklist?.length ?? 0) > 0 && <a href="#incident-section-checklist" className="hover:text-accent">Checklist</a>}
+        <a href="#incident-section-timeline" className="hover:text-accent">Timeline</a>
+      </nav>
+
       <div className="grid grid-cols-12 gap-4">
         {/* Main content */}
         <div className="col-span-12 lg:col-span-8 space-y-4">
           {/* Description */}
           {inc.description && (
-            <Card>
+            <Card id="incident-section-descripcion">
               <CardHeader><CardTitle>Descripción</CardTitle></CardHeader>
               <CardBody>
-                <p className="text-sm text-slate-300 whitespace-pre-wrap">{inc.description}</p>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap max-w-prose">{linkifyDescription(inc.description)}</p>
                 {inc.impact && (
                   <div className="mt-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
                     <p className="text-xs text-amber-400 font-medium mb-1">Impacto</p>
@@ -200,7 +228,7 @@ export default function IncidentDetail() {
 
           {/* Checklist */}
           {totalItems > 0 && (
-            <Card>
+            <Card id="incident-section-checklist">
               <CardHeader>
                 <CardTitle>Checklist</CardTitle>
                 <span className="text-xs text-slate-500">{completedItems}/{totalItems} completados</span>
@@ -267,10 +295,34 @@ export default function IncidentDetail() {
           )}
 
           {/* Timeline / Comments */}
-          <Card>
-            <CardHeader><CardTitle>Timeline</CardTitle></CardHeader>
+          <Card id="incident-section-timeline">
+            <CardHeader>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
+                <CardTitle>Timeline</CardTitle>
+                <div className="flex gap-1 flex-wrap">
+                  {(["all", "user", "system"] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setTimelineFilter(f)}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-xs border transition-colors",
+                        timelineFilter === f
+                          ? "bg-accent/15 border-accent/40 text-accent"
+                          : "border-ops-600 text-slate-500 hover:text-slate-300",
+                      )}
+                    >
+                      {f === "all" ? "Todo" : f === "user" ? "Personas" : "Sistema"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
             <CardBody className="space-y-3 p-3">
-              {inc.comments?.map((c) => {
+              {filteredComments.length === 0 && (
+                <p className="text-xs text-slate-600 py-2">No hay entradas con el filtro seleccionado.</p>
+              )}
+              {filteredComments.map((c) => {
                 const sysIcon = (() => {
                   if (!c.isSystemMessage) return null;
                   const t = c.content.toLowerCase();
@@ -379,8 +431,29 @@ export default function IncidentDetail() {
         </div>
       </div>
 
+      <ConfirmDialog
+        open={takeConfirmOpen}
+        onClose={() => setTakeConfirmOpen(false)}
+        title="Poner incidencia en progreso"
+        description="¿Marcar esta incidencia como «en progreso»? Quedará registrado en el timeline."
+        confirmLabel="Sí, en progreso"
+        loading={updateStatus.isPending}
+        onConfirm={() => {
+          updateStatus.mutate("en_progreso", {
+            onSuccess: () => setTakeConfirmOpen(false),
+          });
+        }}
+      />
+
       {/* Close incident dialog */}
-      <Dialog open={showClose} onClose={() => setShowClose(false)} title="Cerrar Incidencia con RCA" size="lg">
+      <Dialog
+        open={showClose}
+        onClose={() => setShowClose(false)}
+        title="Cerrar incidencia con RCA"
+        description="Esta acción cerrará la incidencia y puede generar un artículo en la base de conocimiento. No se puede deshacer desde aquí."
+        size="lg"
+        closeOnBackdrop={false}
+      >
         <form
           onSubmit={(e) => { e.preventDefault(); closeIncident.mutate(); }}
           className="space-y-4"
@@ -389,6 +462,15 @@ export default function IncidentDetail() {
             <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-300">Se generará automáticamente un artículo en la Base de Conocimiento con esta información.</p>
           </div>
+          {totalItems > 0 && (
+            <p className="text-xs text-slate-500">
+              Checklist antes del cierre:{" "}
+              <strong className="text-slate-300 tabular-nums">
+                {completedItems}/{totalItems}
+              </strong>{" "}
+              ítems completados
+            </p>
+          )}
           <Textarea
             label="Causa Raíz *"
             value={rca.rootCause}
@@ -415,4 +497,18 @@ export default function IncidentDetail() {
       </Dialog>
     </div>
   );
+}
+
+function linkifyDescription(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline break-all">
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }

@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 import https from "https";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 export class VCenterConnector extends BaseConnector {
@@ -14,22 +14,35 @@ export class VCenterConnector extends BaseConnector {
   // Ignore self-signed certs (common in on-prem vCenter)
   private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-  // Stable axios instance — headers updated after login
-  private readonly http: AxiosInstance = axios.create({
-    baseURL: `${(config.VCENTER_URL ?? "").replace(/\/$/, "")}/api`,
-    timeout: 12000,
-    httpsAgent: this.httpsAgent,
-  });
+  private httpInstance: AxiosInstance | null = null;
+  private httpBaseKey = "";
+
+  private get http(): AxiosInstance {
+    const base = (dyn.vcenterUrl() ?? "").replace(/\/$/, "");
+    if (!this.httpInstance || this.httpBaseKey !== base) {
+      this.sessionId = null;
+      this.sessionExpiry = 0;
+      this.httpBaseKey = base;
+      this.httpInstance = axios.create({
+        baseURL: `${base}/api`,
+        timeout: 12000,
+        httpsAgent: this.httpsAgent,
+      });
+    }
+    return this.httpInstance;
+  }
 
   private async getSession(): Promise<string> {
     if (this.sessionId && Date.now() < this.sessionExpiry) return this.sessionId;
 
     const token = Buffer.from(
-      `${config.VCENTER_USER}:${config.VCENTER_PASSWORD}`,
+      `${dyn.vcenterUser()}:${dyn.vcenterPassword()}`,
     ).toString("base64");
 
+    const base = (dyn.vcenterUrl() ?? "").replace(/\/$/, "");
+
     const { data } = await axios.post(
-      `${(config.VCENTER_URL ?? "").replace(/\/$/, "")}/api/session`,
+      `${base}/api/session`,
       null,
       {
         headers: { Authorization: `Basic ${token}` },
@@ -43,7 +56,6 @@ export class VCenterConnector extends BaseConnector {
     this.sessionId = sid.replace(/^"|"$/g, ""); // strip stray quotes just in case
     this.sessionExpiry = Date.now() + 20 * 60 * 1000;
 
-    // Inject into the shared instance
     this.http.defaults.headers.common["vmware-api-session-id"] = this.sessionId!;
     return this.sessionId!;
   }

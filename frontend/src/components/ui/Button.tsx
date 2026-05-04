@@ -37,9 +37,10 @@ export function Button({
     <button
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center font-medium rounded border transition-colors",
+        "inline-flex items-center justify-center font-medium rounded-[var(--radius-card)] border transition-colors min-w-[2.5rem]",
         "focus:outline-none focus:ring-2 focus:ring-accent/50",
         "disabled:opacity-50 disabled:cursor-not-allowed",
+        loading && "min-w-[7rem]",
         variants[variant],
         sizes[size],
         className,

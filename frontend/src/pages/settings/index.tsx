@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Users, KeyRound, ShieldCheck, UserCircle } from "lucide-react";
+import { Users, KeyRound, ShieldCheck, UserCircle, Plug, Database } from "lucide-react";
 import { useAuthStore } from "../../store/useStore";
 import { cn } from "../../lib/utils";
 
@@ -8,6 +8,8 @@ const navItems = [
   { to: "/settings/2fa", label: "Autenticación 2FA", icon: ShieldCheck, adminOnly: false },
   { to: "/settings/users", label: "Usuarios", icon: Users, adminOnly: true },
   { to: "/settings/ssh", label: "Credenciales SSH", icon: KeyRound, adminOnly: true },
+  { to: "/settings/connectors", label: "Conectores", icon: Plug, adminOnly: true },
+  { to: "/settings/inventory", label: "Inventario CMDB", icon: Database, adminOnly: false },
 ];
 
 export default function SettingsLayout() {

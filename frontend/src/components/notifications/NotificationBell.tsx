@@ -80,6 +80,19 @@ export function NotificationBell() {
           qc.invalidateQueries({ queryKey: ["notifications-count"] });
           if (open) qc.invalidateQueries({ queryKey: ["notifications-list"] });
         }
+        if (data.type === "invalidate" && Array.isArray(data.scopes)) {
+          for (const scope of data.scopes as string[]) {
+            if (scope === "incidents") qc.invalidateQueries({ queryKey: ["incidents"] });
+            if (scope === "dashboard") {
+              qc.invalidateQueries({ queryKey: ["dashboard-summary"] });
+              qc.invalidateQueries({ queryKey: ["dashboard-systems"] });
+            }
+            if (scope === "alerts") qc.invalidateQueries({ queryKey: ["alerts"] });
+            if (scope === "cmdb") qc.invalidateQueries({ queryKey: ["cmdb-systems"] });
+            if (scope === "dashboard-systems") qc.invalidateQueries({ queryKey: ["dashboard-systems"] });
+            if (scope === "automations") qc.invalidateQueries({ queryKey: ["automation-runs"] });
+          }
+        }
       } catch {}
     };
 
@@ -87,7 +100,6 @@ export function NotificationBell() {
     return () => ws.removeEventListener("message", handleMessage);
   }, [open, qc, token]);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
@@ -96,6 +108,15 @@ export function NotificationBell() {
     };
     if (open) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
   const unread = countData?.unreadCount ?? 0;
@@ -122,7 +143,11 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-9 w-80 bg-ops-800 border border-ops-600 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div
+          role="dialog"
+          aria-label="Panel de notificaciones"
+          className="absolute right-0 top-9 w-80 bg-ops-800 border border-ops-600 rounded-xl shadow-elev-2 z-dropdown overflow-hidden"
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-ops-600">
             <span className="text-sm font-semibold text-slate-200">Notificaciones</span>

@@ -27,6 +27,24 @@ export interface AlertSummary {
   metadata?: Record<string, unknown>;
 }
 
+/** Alerta persistida en BD (`GET /alerts`). */
+export interface DbAlert {
+  id: string;
+  externalId: string;
+  source: string;
+  systemId: string | null;
+  title: string;
+  description?: string | null;
+  severity: Severity;
+  tags: string[];
+  acknowledged: boolean;
+  resolved: boolean;
+  incidentId: string | null;
+  firedAt: string;
+  createdAt: string;
+  systemName: string | null;
+}
+
 export interface ConnectorResult {
   type: string;
   displayName: string;
@@ -58,10 +76,12 @@ export interface DashboardSummary {
     critical: number;
     healthPercent: number;
   };
-  incidents: { open: number; today: number };
+  incidents: { open: number; today: number; slaBreaches?: number };
   connectors: { total: number; healthy: number; list: ConnectorResult[] };
   demoMode: boolean;
 }
+
+export type IncidentSlaRisk = "ok" | "warning" | "response_breach" | "resolution_breach";
 
 export interface Incident {
   id: string;
@@ -77,6 +97,10 @@ export interface Incident {
   updatedAt: string;
   resolvedAt?: string;
   closedAt?: string;
+  firstResponseAt?: string;
+  slaResponseDueAt?: string;
+  slaResolutionDueAt?: string;
+  slaRisk?: IncidentSlaRisk;
   assignedUser?: { id: string; displayName: string; avatar?: string };
   system?: { id: string; name: string; type: string };
   checklist?: ChecklistItem[];
@@ -135,6 +159,10 @@ export interface AutomationRun {
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
+  awaitingApproval?: boolean;
+  approvalRequestedBy?: string | null;
+  approvalApprovedBy?: string | null;
+  approvalApprovedAt?: string | null;
   action?: { id: string; name: string; category: string };
   triggeredBy?: { id: string; displayName: string };
   system?: { name: string };
@@ -145,8 +173,12 @@ export interface AutomationRunSummary {
   status: AutomationStatus;
   createdAt: string;
   finishedAt?: string;
+  awaitingApproval?: boolean;
   action?: { name: string; category: string };
+  triggeredBy?: { id: string; displayName: string };
+  /** @deprecated usar triggeredBy */
   user?: { displayName: string };
+  system?: { name: string };
 }
 
 export interface KbArticle {
@@ -162,9 +194,12 @@ export interface KbArticle {
   notHelpful: number;
   createdAt: string;
   updatedAt: string;
+  version?: number;
   system?: { name: string; type: string };
   createdByUser?: { displayName: string };
   sourceIncident?: { id: string; title: string };
+  relatedArticles?: { id: string; title: string }[];
+  versionHistory?: { version: number; title: string; createdAt: string }[];
 }
 
 export interface Notification {

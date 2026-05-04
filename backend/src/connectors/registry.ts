@@ -9,9 +9,12 @@ import { NasConnector } from "./nas";
 import { MockConnector, mockAlerts, mockSystems } from "./mock";
 import { QnapConnector } from "./qnap";
 import { HikvisionConnector } from "./hikvision";
+import { M365Connector } from "./m365";
+import { getMaintenanceSystemNamesLower } from "../services/maintenance";
 import { logger } from "../utils/logger";
 import { db, schema } from "../db";
-import { eq } from "drizzle-orm";
+import { hydrateConnectorStoreFromDatabase } from "../services/connectorSettingsService";
+import { dyn } from "./dynamicConnectorConfig";
 
 export interface ConnectorResult {
   type: string;
@@ -42,35 +45,65 @@ class ConnectorRegistry {
     ]);
   }
 
-  init() {
+  private clearConnectorState() {
+    this.connectors.clear();
+    this.healthCache = null;
+    this.alertsCache = null;
+    this.systemsCache = null;
+    this.inflightHealth = null;
+    this.inflightAlerts = null;
+    this.inflightSystems = null;
+  }
+
+  private fillDemoMocks() {
+    const types = ["zabbix", "uptime_kuma", "proxmox", "vcenter", "portainer", "nas", "hikvision", "m365"] as const;
+    const names: Record<string, string> = {
+      zabbix: "Zabbix",
+      uptime_kuma: "Uptime Kuma",
+      proxmox: "Proxmox",
+      vcenter: "VMware vCenter",
+      portainer: "Portainer",
+      nas: "NAS/Almacenamiento",
+      hikvision: "Hikvision NVR",
+      m365: "Microsoft 365 / Intune",
+    };
+    for (const t of types) {
+      this.connectors.set(t, new MockConnector(t, names[t]));
+    }
+    logger.info("Connector registry: DEMO MODE — all connectors mocked");
+  }
+
+  private fillConnectorsFromDyn() {
+    if (dyn.zabbixUrl()) this.connectors.set("zabbix", new ZabbixConnector());
+    if (dyn.uptimeUrl()) this.connectors.set("uptime_kuma", new UptimeKumaConnector());
+    if (dyn.proxmoxUrl()) this.connectors.set("proxmox", new ProxmoxConnector());
+    if (dyn.vcenterUrl()) this.connectors.set("vcenter", new VCenterConnector());
+    if (dyn.portainerUrl()) this.connectors.set("portainer", new PortainerConnector());
+    if (dyn.nasUrl()) this.connectors.set("nas", new NasConnector());
+    if (dyn.qnapUrl()) this.connectors.set("qnap", new QnapConnector());
+    if (dyn.hikvisionUrl()) this.connectors.set("hikvision", new HikvisionConnector());
+    if (dyn.m365TenantId()) this.connectors.set("m365", new M365Connector());
+    logger.info({ connectors: [...this.connectors.keys()] }, "Connector registry initialized");
+  }
+
+  async init() {
+    this.clearConnectorState();
     if (config.DEMO_MODE) {
-      const types = ["zabbix", "uptime_kuma", "proxmox", "vcenter", "portainer", "nas", "hikvision"] as const;
-      const names: Record<string, string> = {
-        zabbix: "Zabbix",
-        uptime_kuma: "Uptime Kuma",
-        proxmox: "Proxmox",
-        vcenter: "VMware vCenter",
-        portainer: "Portainer",
-        nas: "NAS/Almacenamiento",
-        hikvision: "Hikvision NVR",
-      };
-      for (const t of types) {
-        this.connectors.set(t, new MockConnector(t, names[t]));
-      }
-      logger.info("Connector registry: DEMO MODE — all connectors mocked");
+      this.fillDemoMocks();
       return;
     }
+    await hydrateConnectorStoreFromDatabase();
+    this.fillConnectorsFromDyn();
+  }
 
-    if (config.ZABBIX_URL) this.connectors.set("zabbix", new ZabbixConnector());
-    if (config.UPTIME_KUMA_URL) this.connectors.set("uptime_kuma", new UptimeKumaConnector());
-    if (config.PROXMOX_URL) this.connectors.set("proxmox", new ProxmoxConnector());
-    if (config.VCENTER_URL) this.connectors.set("vcenter", new VCenterConnector());
-    if (config.PORTAINER_URL) this.connectors.set("portainer", new PortainerConnector());
-    if (config.NAS_URL) this.connectors.set("nas", new NasConnector());
-    if (config.QNAP_URL) this.connectors.set("qnap", new QnapConnector());
-    if (config.HIKVISION_URL) this.connectors.set("hikvision", new HikvisionConnector());
-
-    logger.info({ connectors: [...this.connectors.keys()] }, "Connector registry initialized");
+  /** Vuelve a instanciar conectores tras cambiar ajustes en BD (ya hidratado el store). */
+  reinitConnectors() {
+    this.clearConnectorState();
+    if (config.DEMO_MODE) {
+      this.fillDemoMocks();
+      return;
+    }
+    this.fillConnectorsFromDyn();
   }
 
   async checkAll(): Promise<ConnectorResult[]> {
@@ -167,7 +200,15 @@ class ConnectorRegistry {
         }
       }
 
-      const merged = all.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      let merged = all.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      try {
+        const silent = await getMaintenanceSystemNamesLower();
+        if (silent.size > 0) {
+          merged = merged.filter((a) => !silent.has(String(a.systemName ?? "").toLowerCase()));
+        }
+      } catch {
+        // ignore maintenance overlay errors
+      }
       this.alertsCache = { ts: Date.now(), data: merged };
       return merged;
     })();

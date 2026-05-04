@@ -1,7 +1,7 @@
 import axios from "axios";
 import https from "https";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 // QNAP QTS API implementation
@@ -17,14 +17,14 @@ export class QnapConnector extends BaseConnector {
   private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   private get baseURL() {
-    return (config.QNAP_URL ?? "").replace(/\/$/, "");
+    return (dyn.qnapUrl() ?? "").replace(/\/$/, "");
   }
 
   private async login(): Promise<string> {
     if (this.authSid && Date.now() < this.sidExpiry) return this.authSid;
 
-    const user = config.QNAP_USER ?? "admin";
-    const password = config.QNAP_PASSWORD ?? "";
+    const user = dyn.qnapUser() ?? "admin";
+    const password = dyn.qnapPassword() ?? "";
 
     // Try QTS v2 REST API first
     try {

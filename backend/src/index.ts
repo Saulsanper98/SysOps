@@ -40,7 +40,12 @@ async function bootstrap() {
       // Allow desktop launcher/webview requests that may send no origin or Origin: null
       if (!origin || origin === "null") return cb(null, true);
 
-      const allowed = new Set([config.FRONTEND_URL, "http://localhost:5173", "http://localhost:80"]);
+      const allowed = new Set([
+        config.FRONTEND_URL,
+        "http://localhost:5173",
+        "http://localhost:5183",
+        "http://localhost:80",
+      ]);
       if (allowed.has(origin)) return cb(null, true);
       return cb(new Error("Not allowed by CORS"), false);
     },
@@ -128,7 +133,7 @@ async function bootstrap() {
   logger.info("Database connection OK");
 
   // ─── Connectors ──────────────────────────────────────────────────────
-  registry.init();
+  await registry.init();
 
   // ─── Workers ─────────────────────────────────────────────────────────
   await startWorker();

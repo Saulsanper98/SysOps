@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"; // Navigate kept for settings redirect
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DocumentTitle } from "./components/DocumentTitle";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppShell } from "./components/layout/AppShell";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -21,6 +23,8 @@ import UsersPage from "./pages/settings/Users";
 import SshCredentials from "./pages/settings/SshCredentials";
 import TwoFactor from "./pages/settings/TwoFactor";
 import Profile from "./pages/settings/Profile";
+import Connectors from "./pages/settings/Connectors";
+import Inventory from "./pages/settings/Inventory";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +40,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <DocumentTitle />
+        <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<AppShell />}>
@@ -58,11 +64,14 @@ export default function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="ssh" element={<SshCredentials />} />
               <Route path="2fa" element={<TwoFactor />} />
+              <Route path="connectors" element={<Connectors />} />
+              <Route path="inventory" element={<Inventory />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Route>
           <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   );

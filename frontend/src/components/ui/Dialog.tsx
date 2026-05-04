@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useId } from "react";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -6,8 +6,12 @@ interface DialogProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Texto accesible adicional bajo el título */
+  description?: string;
   children: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  /** Si es false, solo se cierra con botón X o Escape (acciones destructivas) */
+  closeOnBackdrop?: boolean;
 }
 
 const sizes = {
@@ -19,18 +23,27 @@ const sizes = {
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-export function Dialog({ open, onClose, title, children, size = "md" }: DialogProps) {
+export function Dialog({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  size = "md",
+  closeOnBackdrop = true,
+}: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const descId = useId();
 
-  // Escape key handler
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     if (open) document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  // Focus trap + return focus on close
   useEffect(() => {
     if (!open) return;
 
@@ -39,7 +52,6 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    // Focus first focusable element
     const focusables = dialog.querySelectorAll<HTMLElement>(FOCUSABLE);
     focusables[0]?.focus();
 
@@ -49,9 +61,15 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
       const first = els[0];
       const last = els[els.length - 1];
       if (e.shiftKey) {
-        if (document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        }
       } else {
-        if (document.activeElement === last) { e.preventDefault(); first?.focus(); }
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
       }
     };
 
@@ -66,19 +84,36 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-modal flex items-center justify-center p-4 animate-fade-in"
       aria-modal="true"
       role="dialog"
       aria-labelledby="dialog-title"
+      aria-describedby={description ? descId : undefined}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={closeOnBackdrop ? onClose : undefined}
+        aria-hidden={!closeOnBackdrop}
+      />
       <div
         ref={dialogRef}
-        className={cn("relative w-full bg-ops-800 border border-ops-500 rounded-xl shadow-2xl animate-slide-up", sizes[size])}
+        className={cn(
+          "relative w-full bg-ops-800 border border-ops-500 rounded-[var(--radius-modal)] shadow-elev-3 animate-slide-up",
+          sizes[size],
+        )}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-ops-600">
-          <h2 id="dialog-title" className="text-base font-semibold text-slate-100">{title}</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors" aria-label="Cerrar">
+          <div>
+            <h2 id="dialog-title" className="text-base font-semibold text-slate-100">
+              {title}
+            </h2>
+            {description && (
+              <p id={descId} className="text-xs text-slate-500 mt-1">
+                {description}
+              </p>
+            )}
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors shrink-0" aria-label="Cerrar">
             <X className="w-5 h-5" />
           </button>
         </div>

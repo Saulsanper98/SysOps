@@ -47,6 +47,41 @@ export async function automationRoutes(app: FastifyInstance) {
       throw new ForbiddenError(`Esta acción requiere rol: ${action.requiredRole}`);
     }
 
+    if (action.dangerous) {
+      const [run] = await db
+        .insert(schema.automationRuns)
+        .values({
+          actionId: action.id,
+          triggeredBy: req.user.sub,
+          incidentId: body.incidentId ?? null,
+          systemId: body.systemId ?? null,
+          parameters: body.parameters,
+          status: "pendiente",
+          awaitingApproval: true,
+          approvalRequestedBy: req.user.sub,
+          jobId: null,
+        })
+        .returning();
+
+      await recordAudit({
+        userId: req.user.sub,
+        action: "execute",
+        entityType: "automation_run",
+        entityId: run.id,
+        entityName: action.name,
+        description: `${req.user.displayName} solicitó ejecución (pendiente aprobación): ${action.name}`,
+        metadata: { parameters: body.parameters, actionId: action.id, awaitingApproval: true },
+        req,
+      });
+
+      return reply.status(202).send({
+        runId: run.id,
+        status: "pendiente",
+        awaitingApproval: true,
+        message: "Otro usuario con permiso debe aprobar la ejecución en Automatizaciones → Historial.",
+      });
+    }
+
     const [run] = await db
       .insert(schema.automationRuns)
       .values({
@@ -56,6 +91,7 @@ export async function automationRoutes(app: FastifyInstance) {
         systemId: body.systemId ?? null,
         parameters: body.parameters,
         status: "pendiente",
+        awaitingApproval: false,
       })
       .returning();
 
@@ -91,6 +127,64 @@ export async function automationRoutes(app: FastifyInstance) {
     return reply.status(202).send({ runId: run.id, jobId: job.id, status: "pendiente" });
   });
 
+  app.post("/runs/:runId/approve", { preHandler: requireAuth }, async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const [run] = await db.select().from(schema.automationRuns).where(eq(schema.automationRuns.id, runId)).limit(1);
+    if (!run) throw new NotFoundError("Ejecución");
+    if (!run.awaitingApproval) throw new ForbiddenError("Esta ejecución no está pendiente de aprobación");
+    if (run.approvalRequestedBy === req.user.sub) {
+      throw new ForbiddenError("No puedes aprobar una ejecución que tú mismo solicitaste (cuatro ojos).");
+    }
+
+    const [action] = await db
+      .select()
+      .from(schema.automationActions)
+      .where(eq(schema.automationActions.id, run.actionId))
+      .limit(1);
+    if (!action) throw new NotFoundError("Acción");
+
+    const roleOrder = { readonly: 0, tecnico: 1, admin: 2 };
+    if ((roleOrder[req.user.role as keyof typeof roleOrder] ?? -1) < (roleOrder[action.requiredRole as keyof typeof roleOrder] ?? 99)) {
+      throw new ForbiddenError(`Aprobar requiere al menos rol: ${action.requiredRole}`);
+    }
+
+    await db
+      .update(schema.automationRuns)
+      .set({
+        awaitingApproval: false,
+        approvalApprovedBy: req.user.sub,
+        approvalApprovedAt: new Date(),
+      })
+      .where(eq(schema.automationRuns.id, runId));
+
+    const job = await automationQueue.add(
+      action.jobName,
+      {
+        runId,
+        actionId: action.id,
+        jobName: action.jobName,
+        parameters: (run.parameters as Record<string, unknown>) ?? {},
+        triggeredBy: run.triggeredBy,
+        systemId: run.systemId ?? undefined,
+      },
+      { attempts: 2, backoff: { type: "fixed", delay: 2000 } },
+    );
+
+    await db.update(schema.automationRuns).set({ jobId: job.id ?? null }).where(eq(schema.automationRuns.id, runId));
+
+    await recordAudit({
+      userId: req.user.sub,
+      action: "execute",
+      entityType: "automation_run",
+      entityId: runId,
+      entityName: action.name,
+      description: `${req.user.displayName} aprobó ejecución peligrosa: ${action.name}`,
+      req,
+    });
+
+    return reply.send({ ok: true, jobId: job.id, runId });
+  });
+
   // Get run status
   app.get("/runs/:runId", { preHandler: requireAuth }, async (req) => {
     const { runId } = req.params as { runId: string };
@@ -105,6 +199,10 @@ export async function automationRoutes(app: FastifyInstance) {
         startedAt: schema.automationRuns.startedAt,
         finishedAt: schema.automationRuns.finishedAt,
         createdAt: schema.automationRuns.createdAt,
+        awaitingApproval: schema.automationRuns.awaitingApproval,
+        approvalRequestedBy: schema.automationRuns.approvalRequestedBy,
+        approvalApprovedBy: schema.automationRuns.approvalApprovedBy,
+        approvalApprovedAt: schema.automationRuns.approvalApprovedAt,
         action: {
           id: schema.automationActions.id,
           name: schema.automationActions.name,
@@ -148,8 +246,9 @@ export async function automationRoutes(app: FastifyInstance) {
         startedAt: schema.automationRuns.startedAt,
         finishedAt: schema.automationRuns.finishedAt,
         createdAt: schema.automationRuns.createdAt,
+        awaitingApproval: schema.automationRuns.awaitingApproval,
         action: { name: schema.automationActions.name, category: schema.automationActions.category },
-        triggeredBy: { displayName: schema.users.displayName },
+        triggeredBy: { id: schema.users.id, displayName: schema.users.displayName },
         system: { name: schema.systems.name },
       })
       .from(schema.automationRuns)

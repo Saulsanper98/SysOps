@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiError } from "../lib/api";
@@ -45,6 +45,26 @@ export default function KBArticle() {
     queryFn: () => api.get(`/kb/${id}`).then((r) => r.data),
   });
 
+  const { toc, idByLineIndex } = useMemo(() => {
+    const md = article?.content ?? "";
+    const lines = md.split("\n");
+    const tocOut: { id: string; title: string; level: 2 | 3 }[] = [];
+    const idMap: Record<number, string> = {};
+    let n = 0;
+    lines.forEach((line, i) => {
+      if (line.startsWith("## ")) {
+        const hid = `kb-sec-${n++}`;
+        idMap[i] = hid;
+        tocOut.push({ id: hid, title: line.slice(3).trim(), level: 2 });
+      } else if (line.startsWith("### ")) {
+        const hid = `kb-sec-${n++}`;
+        idMap[i] = hid;
+        tocOut.push({ id: hid, title: line.slice(4).trim(), level: 3 });
+      }
+    });
+    return { toc: tocOut, idByLineIndex: idMap };
+  }, [article?.content]);
+
   const rate = useMutation({
     mutationFn: (helpful: boolean) => api.post(`/kb/${id}/rate`, { helpful }),
     onSuccess: (_, helpful) => {
@@ -64,7 +84,27 @@ export default function KBArticle() {
   }
 
   return (
-    <div className="p-5 space-y-4 animate-fade-in max-w-3xl">
+    <div className="p-5 space-y-4 animate-fade-in max-w-6xl mx-auto lg:grid lg:grid-cols-[minmax(0,220px)_1fr] lg:gap-8 lg:items-start">
+      {toc.length > 0 && (
+        <aside className="hidden lg:block sticky top-4 self-start rounded-lg border border-ops-600 bg-ops-950/80 p-3 text-xs">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 mb-2">En esta página</p>
+          <nav className="space-y-1" aria-label="Índice del artículo">
+            {toc.map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className={cn(
+                  "block py-1 border-l-2 border-transparent pl-2 text-slate-500 hover:text-accent hover:border-accent/40 transition-colors",
+                  item.level === 3 && "pl-4 text-[11px]",
+                )}
+              >
+                {item.title.replace(/\*\*/g, "")}
+              </a>
+            ))}
+          </nav>
+        </aside>
+      )}
+      <div className="min-w-0 max-w-3xl space-y-4">
       {/* Breadcrumb */}
       <Breadcrumb items={[
         { label: "Dashboard", to: "/" },
@@ -126,6 +166,45 @@ export default function KBArticle() {
                 ))}
               </div>
             )}
+
+            {article.version != null && article.version >= 1 && (
+              <p className="text-[11px] text-slate-600">
+                Versión del artículo:{" "}
+                <span className="font-mono text-slate-400">v{article.version}</span>
+              </p>
+            )}
+
+            {(article.relatedArticles?.length ?? 0) > 0 && (
+              <div className="rounded-lg border border-ops-600 bg-ops-900/40 p-3 space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Artículos relacionados</p>
+                <ul className="space-y-1">
+                  {article.relatedArticles!.map((rel) => (
+                    <li key={rel.id}>
+                      <Link to={`/kb/${rel.id}`} className="text-sm text-accent hover:underline">
+                        {rel.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(article.versionHistory?.length ?? 0) > 0 && (
+              <details className="rounded-lg border border-ops-600 bg-ops-900/40 p-3">
+                <summary className="text-xs font-semibold text-slate-500 cursor-pointer">
+                  Historial de versiones ({article.versionHistory!.length})
+                </summary>
+                <ul className="mt-2 space-y-1.5 text-xs text-slate-500">
+                  {article.versionHistory!.map((v) => (
+                    <li key={v.version} className="flex flex-wrap gap-x-2 gap-y-0.5 justify-between">
+                      <span className="font-mono text-slate-400 shrink-0">v{v.version}</span>
+                      <span className="text-slate-400 truncate min-w-0 flex-1">{v.title}</span>
+                      <span className="tabular-nums text-slate-600 shrink-0">{formatDate(v.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
 
           <hr className="border-ops-600" />
@@ -150,8 +229,26 @@ export default function KBArticle() {
                   return;
                 }
                 if (inCode) { codeLines.push(line); return; }
-                if (line.startsWith("## ")) return nodes.push(<h2 key={i} className="text-base font-semibold text-slate-100 mt-4 mb-1">{renderInline(line.slice(3))}</h2>);
-                if (line.startsWith("### ")) return nodes.push(<h3 key={i} className="text-sm font-semibold text-slate-200 mt-3 mb-1">{renderInline(line.slice(4))}</h3>);
+                if (line.startsWith("## "))
+                  return nodes.push(
+                    <h2
+                      key={i}
+                      id={idByLineIndex[i]}
+                      className="text-base font-semibold text-slate-100 mt-4 mb-1 scroll-mt-24"
+                    >
+                      {renderInline(line.slice(3))}
+                    </h2>,
+                  );
+                if (line.startsWith("### "))
+                  return nodes.push(
+                    <h3
+                      key={i}
+                      id={idByLineIndex[i]}
+                      className="text-sm font-semibold text-slate-200 mt-3 mb-1 scroll-mt-24"
+                    >
+                      {renderInline(line.slice(4))}
+                    </h3>,
+                  );
                 if (line.startsWith("- ")) return nodes.push(<p key={i} className="flex gap-2 text-slate-400"><span className="text-accent flex-shrink-0">•</span><span>{renderInline(line.slice(2))}</span></p>);
                 if (!line.trim()) return nodes.push(<div key={i} className="h-2" />);
                 nodes.push(<p key={i}>{renderInline(line)}</p>);
@@ -194,6 +291,7 @@ export default function KBArticle() {
           </div>
         </CardBody>
       </Card>
+      </div>
     </div>
   );
 }

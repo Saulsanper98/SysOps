@@ -75,11 +75,13 @@ export async function auditRoutes(app: FastifyInstance) {
       action: z.string().optional(),
       from: z.string().optional(),
       to: z.string().optional(),
+      userId: z.string().uuid().optional(),
     }).parse(req.query);
 
     const conditions = [];
     if (q.entityType) conditions.push(eq(schema.auditEvents.entityType, q.entityType));
     if (q.action) conditions.push(eq(schema.auditEvents.action, q.action as any));
+    if (q.userId) conditions.push(eq(schema.auditEvents.userId, q.userId));
     if (q.from) conditions.push(gte(schema.auditEvents.createdAt, new Date(q.from)));
     if (q.to) conditions.push(lte(schema.auditEvents.createdAt, new Date(q.to)));
     const whereClause = conditions.length ? and(...conditions) : undefined;

@@ -4,7 +4,7 @@ import { requireAuth } from "../auth/middleware";
 import { db, schema } from "../db";
 import { eq, desc, sql, ilike, or } from "drizzle-orm";
 import { recordAudit } from "../utils/audit";
-import { NotFoundError } from "../utils/errors";
+import { NotFoundError, ValidationError } from "../utils/errors";
 
 export async function kbRoutes(app: FastifyInstance) {
   // Search / list articles
@@ -90,11 +90,32 @@ export async function kbRoutes(app: FastifyInstance) {
         : Promise.resolve([]),
     ]);
 
+    const related = await db
+      .select({
+        id: schema.kbArticles.id,
+        title: schema.kbArticles.title,
+      })
+      .from(schema.kbArticleLinks)
+      .innerJoin(schema.kbArticles, eq(schema.kbArticleLinks.relatedArticleId, schema.kbArticles.id))
+      .where(eq(schema.kbArticleLinks.articleId, id));
+
+    const versions = await db
+      .select({
+        version: schema.kbArticleVersions.version,
+        title: schema.kbArticleVersions.title,
+        createdAt: schema.kbArticleVersions.createdAt,
+      })
+      .from(schema.kbArticleVersions)
+      .where(eq(schema.kbArticleVersions.articleId, id))
+      .orderBy(desc(schema.kbArticleVersions.version));
+
     return {
       ...article,
       system: (system as any)[0] ?? null,
       createdByUser: (createdByUser as any)[0] ?? null,
       sourceIncident: (sourceIncident as any)[0] ?? null,
+      relatedArticles: related,
+      versionHistory: versions,
     };
   });
 
@@ -141,9 +162,19 @@ export async function kbRoutes(app: FastifyInstance) {
     const [before] = await db.select().from(schema.kbArticles).where(eq(schema.kbArticles.id, id)).limit(1);
     if (!before) throw new NotFoundError("Artículo KB");
 
+    const prevVer = before.version ?? 1;
+    await db.insert(schema.kbArticleVersions).values({
+      articleId: id,
+      version: prevVer,
+      title: before.title,
+      content: before.content,
+      summary: before.summary ?? null,
+      editedBy: req.user.sub,
+    });
+
     const [updated] = await db
       .update(schema.kbArticles)
-      .set({ ...body, updatedBy: req.user.sub, updatedAt: new Date() })
+      .set({ ...body, updatedBy: req.user.sub, updatedAt: new Date(), version: prevVer + 1 })
       .where(eq(schema.kbArticles.id, id))
       .returning();
 
@@ -158,6 +189,33 @@ export async function kbRoutes(app: FastifyInstance) {
     });
 
     return updated;
+  });
+
+  app.post("/:id/links", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { relatedArticleId } = z.object({ relatedArticleId: z.string().uuid() }).parse(req.body);
+    if (id === relatedArticleId) throw new ValidationError("No puedes enlazar un artículo consigo mismo");
+
+    const [a] = await db.select().from(schema.kbArticles).where(eq(schema.kbArticles.id, id)).limit(1);
+    const [b] = await db.select().from(schema.kbArticles).where(eq(schema.kbArticles.id, relatedArticleId)).limit(1);
+    if (!a || !b) throw new NotFoundError("Artículo KB");
+
+    await db
+      .insert(schema.kbArticleLinks)
+      .values({ articleId: id, relatedArticleId })
+      .onConflictDoNothing();
+
+    await recordAudit({
+      userId: req.user.sub,
+      action: "update",
+      entityType: "kb_article",
+      entityId: id,
+      entityName: a.title,
+      description: `Enlazado con artículo ${relatedArticleId}`,
+      req,
+    });
+
+    return reply.status(201).send({ ok: true });
   });
 
   // Rate article

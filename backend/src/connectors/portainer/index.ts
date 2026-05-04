@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 import https from "https";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 export class PortainerConnector extends BaseConnector {
@@ -13,7 +13,7 @@ export class PortainerConnector extends BaseConnector {
   private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   private get baseURL() {
-    return (config.PORTAINER_URL ?? "").replace(/\/$/, "");
+    return (dyn.portainerUrl() ?? "").replace(/\/$/, "");
   }
 
   private get client(): AxiosInstance {
@@ -23,8 +23,8 @@ export class PortainerConnector extends BaseConnector {
       httpsAgent: this.httpsAgent,
       headers: this.jwtToken
         ? { Authorization: `Bearer ${this.jwtToken}` }
-        : config.PORTAINER_API_KEY
-        ? { "X-API-Key": config.PORTAINER_API_KEY }
+        : dyn.portainerApiKey()
+        ? { "X-API-Key": dyn.portainerApiKey()! }
         : {},
     });
   }
@@ -33,18 +33,18 @@ export class PortainerConnector extends BaseConnector {
     if (this.jwtToken && Date.now() < this.tokenExpiry) return;
 
     // Prefer API key (stateless), fall back to user/pass JWT
-    if (config.PORTAINER_API_KEY) {
+    if (dyn.portainerApiKey()) {
       this.jwtToken = null; // uses X-API-Key header directly
       return;
     }
 
-    if (!config.PORTAINER_USER || !config.PORTAINER_PASSWORD) {
+    if (!dyn.portainerUser() || !dyn.portainerPassword()) {
       throw new Error("Portainer: configure PORTAINER_API_KEY or PORTAINER_USER/PASSWORD");
     }
 
     const { data } = await axios.post(
       `${this.baseURL}/api/auth`,
-      { username: config.PORTAINER_USER, password: config.PORTAINER_PASSWORD },
+      { username: dyn.portainerUser(), password: dyn.portainerPassword() },
       { timeout: 8000, httpsAgent: this.httpsAgent },
     );
 

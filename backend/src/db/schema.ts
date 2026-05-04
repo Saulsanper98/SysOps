@@ -1,6 +1,6 @@
 import {
   pgTable, text, timestamp, boolean, integer, jsonb,
-  uuid, pgEnum, index,
+  uuid, pgEnum, index, primaryKey, uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -65,6 +65,9 @@ export const systems = pgTable("systems", {
   connectorId: text("connector_id"),    // ID en el sistema origen
   metadata: jsonb("metadata").default({}),
   active: boolean("active").notNull().default(true),
+  /** Silenciar alertas / degradar severidad hasta esta fecha (UTC) */
+  maintenanceUntil: timestamp("maintenance_until"),
+  maintenanceReason: text("maintenance_reason"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -114,19 +117,26 @@ export const incidents = pgTable("incidents", {
   metadata: jsonb("metadata").default({}),
   resolvedAt: timestamp("resolved_at"),
   closedAt: timestamp("closed_at"),
+  /** SLA: primera respuesta humana (comentario no sistema o asignación) */
+  firstResponseAt: timestamp("first_response_at"),
+  slaResponseDueAt: timestamp("sla_response_due_at"),
+  slaResolutionDueAt: timestamp("sla_resolution_due_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => ({
   statusIdx: index("incidents_status_idx").on(t.status),
   severityIdx: index("incidents_severity_idx").on(t.severity),
   assignedIdx: index("incidents_assigned_idx").on(t.assignedTo),
+  slaResponseIdx: index("incidents_sla_response_due_idx").on(t.slaResponseDueAt),
 }));
 
 export const incidentAlerts = pgTable("incident_alerts", {
   incidentId: uuid("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
   alertId: uuid("alert_id").notNull().references(() => alerts.id, { onDelete: "cascade" }),
   linkedAt: timestamp("linked_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  pk: primaryKey({ columns: [t.incidentId, t.alertId] }),
+}));
 
 export const checklistItems = pgTable("checklist_items", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -182,11 +192,30 @@ export const automationRuns = pgTable("automation_runs", {
   jobId: text("job_id"),
   startedAt: timestamp("started_at"),
   finishedAt: timestamp("finished_at"),
+  /** Acciones peligrosas: espera segundo aprobador antes de encolar job */
+  awaitingApproval: boolean("awaiting_approval").notNull().default(false),
+  approvalRequestedBy: uuid("approval_requested_by").references(() => users.id),
+  approvalApprovedBy: uuid("approval_approved_by").references(() => users.id),
+  approvalApprovedAt: timestamp("approval_approved_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({
   statusIdx: index("runs_status_idx").on(t.status),
   actionIdx: index("runs_action_idx").on(t.actionId),
 }));
+
+/** Secuencias de acciones ejecutables en orden (runbook) */
+export const automationRunbooks = pgTable("automation_runbooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** [{ "actionId": "uuid", "parameters": {} }] */
+  steps: jsonb("steps").notNull().default([]),
+  requiredRole: userRoleEnum("required_role").notNull().default("tecnico"),
+  active: boolean("active").notNull().default(true),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
 
 // ─── Knowledge Base ───────────────────────────────────────────────────────────
 
@@ -203,11 +232,32 @@ export const kbArticles = pgTable("kb_articles", {
   viewCount: integer("view_count").notNull().default(0),
   helpful: integer("helpful").notNull().default(0),
   notHelpful: integer("not_helpful").notNull().default(0),
+  version: integer("version").notNull().default(1),
   createdBy: uuid("created_by").references(() => users.id),
   updatedBy: uuid("updated_by").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const kbArticleVersions = pgTable("kb_article_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  articleId: uuid("article_id").notNull().references(() => kbArticles.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  summary: text("summary"),
+  editedBy: uuid("edited_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  articleVerUq: uniqueIndex("kb_article_versions_article_version_uq").on(t.articleId, t.version),
+}));
+
+export const kbArticleLinks = pgTable("kb_article_links", {
+  articleId: uuid("article_id").notNull().references(() => kbArticles.id, { onDelete: "cascade" }),
+  relatedArticleId: uuid("related_article_id").notNull().references(() => kbArticles.id, { onDelete: "cascade" }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.articleId, t.relatedArticleId] }),
+}));
 
 // ─── Audit Events ─────────────────────────────────────────────────────────────
 
@@ -241,6 +291,14 @@ export const connectorStatus = pgTable("connector_status", {
   lastError: text("last_error"),
   latencyMs: integer("latency_ms"),
   metadata: jsonb("metadata").default({}),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/** Configuración UI/BD de conectores (URLs y secretos cifrados). Complementa .env */
+export const connectorSettings = pgTable("connector_settings", {
+  type: connectorTypeEnum("type").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  payloadEncrypted: text("payload_encrypted"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { Card, CardHeader, CardTitle, CardBody } from "../components/ui/Card";
@@ -6,8 +7,9 @@ import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
 import { RefreshCw, TrendingUp, Activity, Server, Bell } from "lucide-react";
 import { cn } from "../lib/utils";
+import { CHART_COLORS, METRIC_TYPE_COLORS } from "../lib/chartTheme";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Brush,
 } from "recharts";
 
 type MetricType = "alerts_count" | "systems_ok" | "latency_ms" | "incidents_open";
@@ -22,9 +24,10 @@ interface MetricResult {
 }
 
 const metricOptions: { value: MetricType; label: string; icon: React.ReactNode; color: string }[] = [
-  { value: "alerts_count", label: "Alertas activas", icon: <Bell className="w-4 h-4" />, color: "#ef4444" },
-  { value: "systems_ok", label: "Sistemas OK", icon: <Server className="w-4 h-4" />, color: "#10b981" },
-  { value: "latency_ms", label: "Latencia (ms)", icon: <Activity className="w-4 h-4" />, color: "#3b82f6" },
+  { value: "alerts_count", label: "Alertas activas", icon: <Bell className="w-4 h-4" />, color: METRIC_TYPE_COLORS.alerts_count },
+  { value: "systems_ok", label: "Sistemas OK", icon: <Server className="w-4 h-4" />, color: METRIC_TYPE_COLORS.systems_ok },
+  { value: "latency_ms", label: "Latencia (ms)", icon: <Activity className="w-4 h-4" />, color: METRIC_TYPE_COLORS.latency_ms },
+  { value: "incidents_open", label: "Incidencias abiertas", icon: <Bell className="w-4 h-4" />, color: METRIC_TYPE_COLORS.incidents_open },
 ];
 
 const granularityOptions = [
@@ -48,15 +51,22 @@ function formatTs(ts: string, gran: Granularity): string {
   return d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
-function MetricChart({ type, color, granularity, fromHours }: {
-  type: MetricType; color: string; granularity: Granularity; fromHours: number;
+function formatMetricValue(type: MetricType, v: number): string {
+  if (type === "latency_ms") return `${Math.round(v)} ms`;
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(1);
+}
+
+function MetricChart({ type, color, granularity, fromHours, chartLabel, metricSource }: {
+  type: MetricType; color: string; granularity: Granularity; fromHours: number; chartLabel: string;
+  metricSource: string;
 }) {
   const from = new Date(Date.now() - fromHours * 60 * 60 * 1000).toISOString();
 
   const { data, isLoading, refetch, isFetching } = useQuery<MetricResult>({
-    queryKey: ["metrics", type, granularity, fromHours],
+    queryKey: ["metrics", type, granularity, fromHours, metricSource],
     queryFn: () =>
-      api.get("/metrics/history", { params: { type, granularity, from, source: "all" } })
+      api.get("/metrics/history", { params: { type, granularity, from, source: metricSource } })
         .then((r) => r.data),
     staleTime: 60000,
     refetchInterval: 300000,
@@ -78,14 +88,14 @@ function MetricChart({ type, color, granularity, fromHours }: {
           ].map(({ label, val }) => (
             <div key={label} className="p-3 bg-ops-850 rounded-lg border border-ops-700">
               <p className="text-xs text-slate-500">{label}</p>
-              <p className="text-lg font-bold font-mono" style={{ color }}>{val}</p>
+              <p className="text-lg font-bold font-mono" style={{ color }}>{formatMetricValue(type, val)}</p>
             </div>
           ))}
         </div>
       )}
 
       {/* Chart */}
-      <div className="h-48 relative">
+      <div className="h-60 relative">
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm animate-pulse">
             Cargando datos...
@@ -96,33 +106,41 @@ function MetricChart({ type, color, granularity, fromHours }: {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <AreaChart data={points} margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
               <defs>
                 <linearGradient id={`grad-${type}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={color} stopOpacity={0.3} />
                   <stop offset="95%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1a2540" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} vertical={false} />
               <XAxis
                 dataKey="timestamp"
                 tickFormatter={(ts) => formatTs(ts, granularity)}
-                tick={{ fill: "#475569", fontSize: 10 }}
+                tick={{ fill: CHART_COLORS.axisTick, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 minTickGap={40}
               />
               <YAxis
-                tick={{ fill: "#475569", fontSize: 10 }}
+                tick={{ fill: CHART_COLORS.axisTick, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
-                width={30}
+                width={type === "latency_ms" ? 42 : 34}
+                tickFormatter={(v) => (type === "latency_ms" ? `${Math.round(Number(v))}` : String(v))}
+                domain={type === "latency_ms" ? ["auto", "auto"] : [0, "auto"]}
               />
               <Tooltip
-                contentStyle={{ background: "#111827", border: "1px solid #1a2540", borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: "#94a3b8" }}
+                contentStyle={{
+                  background: CHART_COLORS.tooltipBg,
+                  border: `1px solid ${CHART_COLORS.tooltipBorder}`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: CHART_COLORS.axisTick }}
                 itemStyle={{ color }}
                 labelFormatter={(ts) => formatTs(String(ts), granularity)}
+                formatter={(value: number) => [formatMetricValue(type, value), chartLabel]}
               />
               <Area
                 type="monotone"
@@ -132,6 +150,14 @@ function MetricChart({ type, color, granularity, fromHours }: {
                 fill={`url(#grad-${type})`}
                 dot={false}
                 activeDot={{ r: 4, fill: color }}
+              />
+              <Brush
+                dataKey="timestamp"
+                height={22}
+                stroke={CHART_COLORS.axisTick}
+                fill="rgba(15, 23, 42, 0.85)"
+                travellerWidth={8}
+                tickFormatter={(ts) => formatTs(String(ts), granularity)}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -144,13 +170,34 @@ function MetricChart({ type, color, granularity, fromHours }: {
           <RefreshCw className={cn("w-3 h-3", isFetching && "animate-spin")} />
         </button>
       </div>
+      {points.length > 1 && (
+        <p className="text-[10px] text-slate-600 text-center -mt-1">
+          Usa la barra inferior del gráfico para acotar el tramo visible
+        </p>
+      )}
     </div>
   );
 }
 
 export default function Metrics() {
+  const [, setSearchParams] = useSearchParams();
   const [granularity, setGranularity] = useState<Granularity>("1h");
   const [fromHours, setFromHours] = useState("24");
+  const [metricSource, setMetricSource] = useState(
+    () => new URLSearchParams(window.location.search).get("source") ?? "all",
+  );
+
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (metricSource !== "all") p.set("source", metricSource);
+        else p.delete("source");
+        return p;
+      },
+      { replace: true },
+    );
+  }, [metricSource, setSearchParams]);
 
   return (
     <div className="p-5 space-y-5 animate-fade-in">
@@ -160,7 +207,7 @@ export default function Metrics() {
           <h1 className="text-lg font-bold text-slate-100">Métricas</h1>
           <p className="text-xs text-slate-500 mt-0.5">Historial de rendimiento y estado del sistema</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="w-36">
             <Select
               value={fromHours}
@@ -173,6 +220,24 @@ export default function Metrics() {
               value={granularity}
               onChange={(e) => setGranularity(e.target.value as Granularity)}
               options={granularityOptions}
+            />
+          </div>
+          <div className="w-40">
+            <Select
+              value={metricSource}
+              onChange={(e) => setMetricSource(e.target.value)}
+              options={[
+                { value: "all", label: "Fuente: todas" },
+                { value: "zabbix", label: "Zabbix" },
+                { value: "uptime_kuma", label: "Uptime Kuma" },
+                { value: "proxmox", label: "Proxmox" },
+                { value: "vcenter", label: "vCenter" },
+                { value: "portainer", label: "Portainer" },
+                { value: "nas", label: "NAS" },
+                { value: "qnap", label: "QNAP" },
+                { value: "hikvision", label: "Hikvision" },
+                { value: "m365", label: "M365" },
+              ]}
             />
           </div>
         </div>
@@ -197,6 +262,8 @@ export default function Metrics() {
                 color={color}
                 granularity={granularity}
                 fromHours={Number(fromHours)}
+                chartLabel={label}
+                metricSource={metricSource}
               />
             </CardBody>
           </Card>

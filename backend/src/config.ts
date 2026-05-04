@@ -78,6 +78,12 @@ const envSchema = z.object({
 
   // TOTP
   TOTP_ISSUER: z.string().default("SysOps Hub"),
+
+  /** Secreto compartido para POST /api/ingest/alerts (cabecera X-Ingest-Secret). Opcional: si no se define, el endpoint queda desactivado. */
+  INGEST_WEBHOOK_SECRET: z.string().min(8).optional(),
+
+  /** Si está definido, se registra el conector M365 (stub Graph hasta implementación completa). */
+  M365_TENANT_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

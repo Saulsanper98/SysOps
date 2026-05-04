@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
@@ -8,15 +8,40 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { BookOpen, Search, Plus, ThumbsUp, Eye, Tag, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { timeAgo, cn } from "../lib/utils";
+import { useDebounce } from "../lib/hooks/useDebounce";
 
 const PAGE_SIZE = 9;
+
+function estimateReadMinutes(article: KbArticle): number {
+  const words = `${article.title} ${article.summary ?? ""}`.split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function HighlightTitle({ text, needle }: { text: string; needle: string }) {
+  if (!needle.trim()) return <>{text}</>;
+  const q = needle.trim().toLowerCase();
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q);
+  if (idx < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-amber-500/25 text-amber-100 rounded px-0.5">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
 
 export default function KB() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, tag]);
 
   const { data: articles, isLoading } = useQuery<KbArticle[]>({
     queryKey: ["kb", debouncedSearch, tag],
@@ -26,7 +51,7 @@ export default function KB() {
   });
 
   // Extract all unique tags
-  const allTags = [...new Set((articles ?? []).flatMap((a) => a.tags))].slice(0, 20);
+  const allTags = [...new Set((articles ?? []).flatMap((a) => a.tags))].sort((a, b) => a.localeCompare(b)).slice(0, 24);
 
   const totalPages = Math.ceil((articles?.length ?? 0) / PAGE_SIZE);
   const pagedArticles = useMemo(
@@ -54,11 +79,7 @@ export default function KB() {
             placeholder="Buscar por título, contenido, error..."
             value={search}
             icon={<Search className="w-3.5 h-3.5" />}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              clearTimeout((window as any)._kbTimeout);
-              (window as any)._kbTimeout = setTimeout(() => setDebouncedSearch(e.target.value), 300);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
@@ -128,8 +149,9 @@ export default function KB() {
 
                 <div>
                   <h3 className="text-sm font-semibold text-slate-200 line-clamp-2 leading-snug">
-                    {article.title}
+                    <HighlightTitle text={article.title} needle={debouncedSearch} />
                   </h3>
+                  <p className="text-[10px] text-slate-600 mt-1">~{estimateReadMinutes(article)} min lectura</p>
                   {article.summary && (
                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{article.summary}</p>
                   )}

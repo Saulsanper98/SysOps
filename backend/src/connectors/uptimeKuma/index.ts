@@ -1,6 +1,6 @@
 import axios, { type AxiosInstance } from "axios";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 // Uptime Kuma heartbeat status codes
@@ -14,12 +14,11 @@ export class UptimeKumaConnector extends BaseConnector {
 
   constructor() {
     super();
+    const key = dyn.uptimeApiKey();
     this.client = axios.create({
-      baseURL: config.UPTIME_KUMA_URL,
+      baseURL: dyn.uptimeUrl(),
       timeout: 10000,
-      headers: config.UPTIME_KUMA_API_KEY
-        ? { Authorization: `Bearer ${config.UPTIME_KUMA_API_KEY}` }
-        : {},
+      headers: key ? { Authorization: `Bearer ${key}` } : {},
     });
   }
 
@@ -27,7 +26,7 @@ export class UptimeKumaConnector extends BaseConnector {
     const start = Date.now();
     try {
       // Try authenticated endpoint first; fall back to public status page
-      if (config.UPTIME_KUMA_API_KEY) {
+      if (dyn.uptimeApiKey()) {
         const { data } = await this.client.get("/api/monitor", { timeout: 5000 });
         const count = data?.monitors?.length ?? 0;
         return {
@@ -50,7 +49,7 @@ export class UptimeKumaConnector extends BaseConnector {
   }
 
   async getAlerts(): Promise<AlertSummary[]> {
-    if (!config.UPTIME_KUMA_API_KEY) return [];
+      if (!dyn.uptimeApiKey()) return [];
 
     try {
       const { data } = await this.client.get("/api/monitor");
@@ -82,7 +81,7 @@ export class UptimeKumaConnector extends BaseConnector {
   }
 
   async getSystems(): Promise<SystemStatus[]> {
-    if (!config.UPTIME_KUMA_API_KEY) return [];
+      if (!dyn.uptimeApiKey()) return [];
 
     try {
       const { data } = await this.client.get("/api/monitor");

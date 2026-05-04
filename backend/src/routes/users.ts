@@ -40,6 +40,22 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   // GET /me — own profile (any authenticated user)
+  /** Lista compacta para asignación de incidencias (admin y técnico). */
+  app.get("/assignable", { preHandler: requireAuth }, async (req) => {
+    if (req.user.role === "readonly") return [];
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        displayName: schema.users.displayName,
+        username: schema.users.username,
+        role: schema.users.role,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.active, true))
+      .orderBy(schema.users.displayName);
+    return rows;
+  });
+
   app.get("/me", { preHandler: requireAuth }, async (req) => {
     const [user] = await db
       .select({

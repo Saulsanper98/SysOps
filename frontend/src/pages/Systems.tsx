@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "../components/ui/Dialog";
 import { api } from "../lib/api";
@@ -10,9 +11,10 @@ import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { StatusDot } from "../components/ui/StatusDot";
 import {
-  Server, Monitor, Database, Globe, RefreshCw, Search, Box,
+  Server, Monitor, Database, Globe, RefreshCw, Search, Box, LayoutGrid, Table2, Layers, Download,
 } from "lucide-react";
-import { cn, systemStatusColor, timeAgo } from "../lib/utils";
+import { cn } from "../lib/utils";
+import { usePreferencesStore } from "../store/useStore";
 
 const typeOptions = [
   { value: "", label: "Todos los tipos" },
@@ -44,6 +46,88 @@ const statusLabel: Record<SystemStatus, string> = {
   critico: "Crítico",
   desconocido: "Desconocido",
 };
+
+type SystemRow = SystemStatusItem & { displayName: string };
+
+type SortKey = "displayName" | "type" | "status" | "cpu" | "memory" | "disk" | "source";
+type SortDir = "asc" | "desc";
+
+const statusRank: Record<SystemStatus, number> = {
+  critico: 0,
+  degradado: 1,
+  desconocido: 2,
+  ok: 3,
+};
+
+function metricSort(a: number | undefined, b: number | undefined, dir: SortDir): number {
+  const mul = dir === "asc" ? 1 : -1;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1 * mul;
+  if (b == null) return -1 * mul;
+  return (a - b) * mul;
+}
+
+function downloadSystemsCsv(rows: SystemRow[]) {
+  const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const headers = ["displayName", "name", "externalId", "type", "status", "cpu", "memory", "disk", "source"];
+  const lines = [headers.join(",")];
+  for (const r of rows) {
+    const src = String(r.metadata?.source ?? "");
+    lines.push(
+      [
+        esc(r.displayName),
+        esc(r.name),
+        esc(r.externalId),
+        esc(r.type),
+        esc(r.status),
+        esc(r.metrics?.cpu != null ? String(r.metrics.cpu) : ""),
+        esc(r.metrics?.memory != null ? String(r.metrics.memory) : ""),
+        esc(r.metrics?.disk != null ? String(r.metrics.disk) : ""),
+        esc(src),
+      ].join(","),
+    );
+  }
+  const blob = new Blob(["\ufeff", lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sistemas-vivos-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function sortSystemRows(rows: SystemRow[], key: SortKey, dir: SortDir): SystemRow[] {
+  const mul = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    let cmp = 0;
+    switch (key) {
+      case "displayName":
+        cmp = a.displayName.localeCompare(b.displayName, "es");
+        break;
+      case "type":
+        cmp = a.type.localeCompare(b.type);
+        break;
+      case "status":
+        cmp = statusRank[a.status] - statusRank[b.status];
+        break;
+      case "cpu":
+        return metricSort(a.metrics?.cpu, b.metrics?.cpu, dir);
+      case "memory":
+        return metricSort(a.metrics?.memory, b.metrics?.memory, dir);
+      case "disk":
+        return metricSort(a.metrics?.disk, b.metrics?.disk, dir);
+      case "source": {
+        const sa = String(a.metadata?.source ?? "");
+        const sb = String(b.metadata?.source ?? "");
+        cmp = sa.localeCompare(sb);
+        break;
+      }
+      default:
+        cmp = 0;
+    }
+    return cmp * mul;
+  });
+}
 
 function TypeIcon({ type }: { type: string }) {
   if (type === "vm") return <Monitor className="w-5 h-5 text-blue-400" />;
@@ -78,7 +162,7 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-function SystemDetailDialog({ system, onClose }: { system: SystemStatusItem; onClose: () => void }) {
+function SystemDetailDialog({ system, onClose }: { system: SystemRow; onClose: () => void }) {
   const cpu = system.metrics?.cpu;
   const memory = system.metrics?.memory;
   const disk = system.metrics?.disk;
@@ -88,7 +172,7 @@ function SystemDetailDialog({ system, onClose }: { system: SystemStatusItem; onC
   const meta = system.metadata ?? {};
 
   return (
-    <Dialog open title={system.name} onClose={onClose} size="md">
+    <Dialog open title={system.displayName} onClose={onClose} size="md">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <TypeIcon type={system.type} />
@@ -153,7 +237,7 @@ function compactMeta(system: SystemStatusItem) {
     .map((k) => ({ key: k, value: String(meta[k]) }));
 }
 
-function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: () => void }) {
+function SystemCard({ system, onSelect }: { system: SystemRow; onSelect: () => void }) {
   const cpu = system.metrics?.cpu;
   const memory = system.metrics?.memory;
   const disk = system.metrics?.disk;
@@ -172,7 +256,7 @@ function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: 
         <div className="flex items-center gap-2 min-w-0">
           <TypeIcon type={system.type} />
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-100 truncate">{system.name}</p>
+            <p className="text-sm font-bold text-slate-100 truncate">{system.displayName}</p>
             <p className="text-xs text-slate-500 capitalize">{system.type}</p>
           </div>
         </div>
@@ -212,11 +296,143 @@ function SystemCard({ system, onSelect }: { system: SystemStatusItem; onSelect: 
   );
 }
 
+function SortTh({
+  label,
+  colKey,
+  activeKey,
+  dir,
+  onSort,
+}: {
+  label: string;
+  colKey: SortKey;
+  activeKey: SortKey;
+  dir: SortDir;
+  onSort: (k: SortKey) => void;
+}) {
+  const active = activeKey === colKey;
+  return (
+    <th scope="col" className="px-3 py-2.5 font-medium whitespace-nowrap">
+      <button
+        type="button"
+        onClick={() => onSort(colKey)}
+        className="inline-flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        {label}
+        {active && <span className="text-accent text-[10px] tabular-nums">{dir === "asc" ? "▲" : "▼"}</span>}
+      </button>
+    </th>
+  );
+}
+
+function pctCell(v: number | undefined) {
+  if (v === undefined || Number.isNaN(v)) return <span className="text-slate-600">—</span>;
+  return <span className="font-mono tabular-nums">{Math.round(v)}%</span>;
+}
+
+function SystemsTable({
+  rows,
+  groupSections,
+  sortKey,
+  sortDir,
+  onSort,
+  onSelectRow,
+  onRename,
+}: {
+  rows: SystemRow[];
+  groupSections: { status: SystemStatus; rows: SystemRow[] }[] | null;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (k: SortKey) => void;
+  onSelectRow: (row: SystemRow) => void;
+  onRename: (row: SystemRow) => void;
+}) {
+  const renderRow = (sys: SystemRow) => {
+    const src = sys.metadata?.source != null ? String(sys.metadata.source) : "";
+    return (
+      <tr
+        key={sys.externalId}
+        onClick={() => onSelectRow(sys)}
+        className="border-t border-ops-700/60 hover:bg-ops-800/80 cursor-pointer transition-colors"
+      >
+        <td className="px-3 py-2.5 font-medium text-slate-100 max-w-[200px]">
+          <div className="flex items-center gap-2 min-w-0">
+            <TypeIcon type={sys.type} />
+            <span className="truncate">{sys.displayName}</span>
+          </div>
+        </td>
+        <td className="px-3 py-2.5 text-slate-400 capitalize whitespace-nowrap">{sys.type}</td>
+        <td className="px-3 py-2.5 whitespace-nowrap">
+          <Badge className={statusBadgeColor[sys.status]}>{statusLabel[sys.status]}</Badge>
+        </td>
+        <td className="px-3 py-2.5 text-right">{pctCell(sys.metrics?.cpu)}</td>
+        <td className="px-3 py-2.5 text-right">{pctCell(sys.metrics?.memory)}</td>
+        <td className="px-3 py-2.5 text-right">{pctCell(sys.metrics?.disk)}</td>
+        <td className="px-3 py-2.5 text-slate-500 text-xs max-w-[140px] truncate" title={src || undefined}>
+          {src || "—"}
+        </td>
+        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename(sys);
+            }}
+          >
+            Alias
+          </Button>
+        </td>
+      </tr>
+    );
+  };
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-ops-600 bg-ops-900/40 max-h-[min(70vh,720px)] overflow-y-auto">
+      <table className="w-full text-sm text-left min-w-[720px]">
+        <thead className="sticky top-0 z-10 bg-ops-850 border-b border-ops-600 shadow-sm">
+          <tr className="text-xs uppercase tracking-wide text-slate-500">
+            <SortTh label="Nombre" colKey="displayName" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <SortTh label="Tipo" colKey="type" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <SortTh label="Estado" colKey="status" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <SortTh label="CPU" colKey="cpu" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <SortTh label="Mem" colKey="memory" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <SortTh label="Disco" colKey="disk" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <SortTh label="Fuente" colKey="source" activeKey={sortKey} dir={sortDir} onSort={onSort} />
+            <th scope="col" className="px-3 py-2.5 text-right font-medium text-slate-500">
+              Acciones
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {groupSections
+            ? groupSections.map(({ status, rows: sectionRows }) => (
+                <Fragment key={status}>
+                  <tr className="bg-ops-800/90">
+                    <td colSpan={8} className="px-3 py-2 text-xs font-semibold text-slate-300">
+                      {statusLabel[status]} <span className="text-slate-500 font-normal">({sectionRows.length})</span>
+                    </td>
+                  </tr>
+                  {sectionRows.map((sys) => renderRow(sys))}
+                </Fragment>
+              ))
+            : rows.map((sys) => renderRow(sys))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Systems() {
+  const systemsViewMode = usePreferencesStore((s) => s.systemsViewMode);
+  const setSystemsViewMode = usePreferencesStore((s) => s.setSystemsViewMode);
+
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [selectedSystem, setSelectedSystem] = useState<SystemStatusItem | null>(null);
+  const [selectedSystem, setSelectedSystem] = useState<SystemRow | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("displayName");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [groupByStatus, setGroupByStatus] = useState(false);
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [editingAliasId, setEditingAliasId] = useState<string | null>(null);
   const [aliasDraft, setAliasDraft] = useState("");
@@ -242,14 +458,12 @@ export default function Systems() {
     staleTime: 15000,
   });
 
-  const systemsWithAlias = useMemo(
-    () =>
-      (systems ?? []).map((s) => ({
-        ...s,
-        displayName: aliases[s.externalId]?.trim() || s.name,
-      })),
-    [systems, aliases],
-  );
+  const systemsWithAlias = useMemo((): SystemRow[] => {
+    return (systems ?? []).map((s) => ({
+      ...s,
+      displayName: aliases[s.externalId]?.trim() || s.name,
+    }));
+  }, [systems, aliases]);
 
   const filtered = systemsWithAlias.filter((s) => {
     const haystack = `${s.displayName} ${s.name}`.toLowerCase();
@@ -258,6 +472,37 @@ export default function Systems() {
     if (statusFilter && s.status !== statusFilter) return false;
     return true;
   });
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedRows = useMemo(
+    () => sortSystemRows(filtered, sortKey, sortDir),
+    [filtered, sortKey, sortDir],
+  );
+
+  const groupSections = useMemo(() => {
+    if (!groupByStatus) return null;
+    const order: SystemStatus[] = ["critico", "degradado", "desconocido", "ok"];
+    const buckets = new Map<SystemStatus, SystemRow[]>();
+    for (const row of sortedRows) {
+      const list = buckets.get(row.status) ?? [];
+      list.push(row);
+      buckets.set(row.status, list);
+    }
+    return order
+      .filter((st) => (buckets.get(st)?.length ?? 0) > 0)
+      .map((st) => ({ status: st, rows: buckets.get(st)! }));
+  }, [groupByStatus, sortedRows]);
+
+  const editingRowTable = editingAliasId
+    ? systemsWithAlias.find((s) => s.externalId === editingAliasId)
+    : undefined;
 
   const statusCounts = (systems ?? []).reduce<Record<string, number>>((acc, s) => {
     acc[s.status] = (acc[s.status] ?? 0) + 1;
@@ -274,16 +519,76 @@ export default function Systems() {
             {systemsWithAlias.length ?? 0} sistemas monitorizados
             {statusCounts.critico ? ` · ${statusCounts.critico} críticos` : ""}
             {statusCounts.degradado ? ` · ${statusCounts.degradado} degradados` : ""}
+            {" · "}
+            <Link to="/settings/inventory" className="text-accent hover:underline">
+              Inventario CMDB y mantenimiento
+            </Link>
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />}
-          onClick={() => refetch()}
-        >
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div
+            className="flex rounded-lg border border-ops-600 p-0.5 bg-ops-850/90"
+            role="group"
+            aria-label="Vista de sistemas"
+          >
+            <button
+              type="button"
+              onClick={() => setSystemsViewMode("cards")}
+              title="Vista tarjetas"
+              aria-pressed={systemsViewMode === "cards"}
+              className={cn(
+                "p-2 rounded-md transition-colors",
+                systemsViewMode === "cards"
+                  ? "bg-ops-700 text-slate-100 shadow-sm"
+                  : "text-slate-500 hover:text-slate-300",
+              )}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSystemsViewMode("table")}
+              title="Vista tabla"
+              aria-pressed={systemsViewMode === "table"}
+              className={cn(
+                "p-2 rounded-md transition-colors",
+                systemsViewMode === "table"
+                  ? "bg-ops-700 text-slate-100 shadow-sm"
+                  : "text-slate-500 hover:text-slate-300",
+              )}
+            >
+              <Table2 className="w-4 h-4" />
+            </button>
+          </div>
+          {systemsViewMode === "table" && (
+            <Button
+              variant={groupByStatus ? "secondary" : "ghost"}
+              size="sm"
+              icon={<Layers className="w-3.5 h-3.5" />}
+              onClick={() => setGroupByStatus((g) => !g)}
+            >
+              Agrupar por estado
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Download className="w-3.5 h-3.5" />}
+            onClick={() => downloadSystemsCsv(sortedRows)}
+            disabled={sortedRows.length === 0}
+            title="Exportar la vista actual (filtros y orden) a CSV"
+          >
+            CSV
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />}
+            onClick={() => refetch()}
+          >
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {/* Status summary chips */}
@@ -345,14 +650,24 @@ export default function Systems() {
             <p className="text-slate-600 text-sm">No se encontraron sistemas</p>
           </CardBody>
         </Card>
+      ) : systemsViewMode === "table" ? (
+        <SystemsTable
+          rows={sortedRows}
+          groupSections={groupSections}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={handleSort}
+          onSelectRow={(row) => setSelectedSystem(row)}
+          onRename={(row) => {
+            setEditingAliasId(row.externalId);
+            setAliasDraft(aliases[row.externalId] ?? "");
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((sys) => (
             <div key={sys.externalId} className="space-y-1.5">
-              <SystemCard
-                system={{ ...sys, name: (sys as any).displayName }}
-                onSelect={() => setSelectedSystem({ ...sys, name: (sys as any).displayName })}
-              />
+              <SystemCard system={sys} onSelect={() => setSelectedSystem(sys)} />
               <div className="px-1 flex items-center gap-2">
                 {editingAliasId === sys.externalId ? (
                   <>
@@ -409,6 +724,45 @@ export default function Systems() {
 
       {selectedSystem && (
         <SystemDetailDialog system={selectedSystem} onClose={() => setSelectedSystem(null)} />
+      )}
+
+      {systemsViewMode === "table" && editingAliasId && editingRowTable && (
+        <Dialog
+          open
+          title={`Alias local · ${editingRowTable.displayName}`}
+          onClose={() => setEditingAliasId(null)}
+          size="sm"
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Nombre en origen: <span className="font-mono text-slate-400">{editingRowTable.name}</span>
+            </p>
+            <Input
+              label="Mostrar como"
+              value={aliasDraft}
+              onChange={(e) => setAliasDraft(e.target.value)}
+              placeholder="Alias en esta pantalla"
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" size="sm" onClick={() => setEditingAliasId(null)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const value = aliasDraft.trim();
+                  const next = { ...aliases };
+                  if (!value || value === editingRowTable.name) delete next[editingAliasId];
+                  else next[editingAliasId] = value;
+                  saveAliases(next);
+                  setEditingAliasId(null);
+                }}
+              >
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       )}
     </div>
   );

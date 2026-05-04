@@ -1,7 +1,7 @@
 import axios from "axios";
 import https from "https";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 // Synology DSM 6/7 API implementation
@@ -16,7 +16,7 @@ export class NasConnector extends BaseConnector {
   private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   private get baseURLs() {
-    const raw = (config.NAS_URL ?? "").trim();
+    const raw = (dyn.nasUrl() ?? "").trim();
     if (!raw) return [];
     return raw
       .split(",")
@@ -41,8 +41,8 @@ export class NasConnector extends BaseConnector {
         api: "SYNO.API.Auth",
         version: 3,
         method: "login",
-        account: config.NAS_USER,
-        passwd: config.NAS_PASSWORD,
+        account: dyn.nasUser(),
+        passwd: dyn.nasPassword(),
         session: "SysOpsHub",
         format: "sid",
       },

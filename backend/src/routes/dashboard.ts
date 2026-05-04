@@ -2,18 +2,20 @@ import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../auth/middleware";
 import { registry } from "../connectors/registry";
 import { db, schema } from "../db";
-import { eq, and, isNull, desc, count, sql } from "drizzle-orm";
+import { desc, count, sql, lt, notInArray, isNull, or, and } from "drizzle-orm";
 import { config } from "../config";
 
 export async function dashboardRoutes(app: FastifyInstance) {
   // Main dashboard summary
   app.get("/summary", { preHandler: requireAuth }, async () => {
+    const now = new Date();
     const [
       alertData,
       systemData,
       connectorData,
       openIncidents,
       todayIncidents,
+      slaBreaches,
     ] = await Promise.all([
       registry.getAllAlerts(),
       registry.getAllSystems(),
@@ -30,6 +32,19 @@ export async function dashboardRoutes(app: FastifyInstance) {
         .from(schema.incidents)
         .where(
           sql`DATE(${schema.incidents.createdAt}) = CURRENT_DATE`,
+        )
+        .then((r) => r[0]?.count ?? 0),
+      db
+        .select({ count: count() })
+        .from(schema.incidents)
+        .where(
+          and(
+            notInArray(schema.incidents.status, ["resuelta", "cerrada"]),
+            or(
+              and(isNull(schema.incidents.firstResponseAt), lt(schema.incidents.slaResponseDueAt, now)),
+              lt(schema.incidents.slaResolutionDueAt, now),
+            )!,
+          ),
         )
         .then((r) => r[0]?.count ?? 0),
     ]);
@@ -67,6 +82,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       incidents: {
         open: Number(openIncidents),
         today: Number(todayIncidents),
+        slaBreaches: Number(slaBreaches),
       },
       connectors: {
         total: connectorData.length,

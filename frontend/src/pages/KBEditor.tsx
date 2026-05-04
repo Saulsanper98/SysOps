@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Save, Eye, EyeOff, X, Plus, ArrowLeft } from "lucide-react";
@@ -24,6 +25,7 @@ export default function KBEditor() {
   });
   const [tagInput, setTagInput] = useState("");
   const [preview, setPreview] = useState(false);
+  const [relatedIdInput, setRelatedIdInput] = useState("");
 
   // Load existing article when editing
   const { isLoading } = useQuery<KbArticle>({
@@ -69,6 +71,17 @@ export default function KBEditor() {
       qc.invalidateQueries({ queryKey: ["kb-articles"] });
       qc.invalidateQueries({ queryKey: ["kb-article", id] });
       navigate(`/kb/${id}`);
+    },
+    onError: (err) => toast.error(apiError(err)),
+  });
+
+  const linkRelated = useMutation({
+    mutationFn: (relatedArticleId: string) =>
+      api.post(`/kb/${id}/links`, { relatedArticleId }).then((r) => r.data),
+    onSuccess: () => {
+      toast.success("Enlace añadido");
+      qc.invalidateQueries({ queryKey: ["kb-article", id] });
+      setRelatedIdInput("");
     },
     onError: (err) => toast.error(apiError(err)),
   });
@@ -249,6 +262,44 @@ export default function KBEditor() {
               )}
             </CardBody>
           </Card>
+
+          {isEdit && (
+            <Card>
+              <CardBody className="space-y-3">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Enlaces entre artículos</p>
+                <p className="text-[11px] text-slate-600">
+                  Pega el UUID de otro artículo KB para enlazarlo bidireccionalmente en la ficha.
+                </p>
+                {article?.relatedArticles && article.relatedArticles.length > 0 && (
+                  <ul className="space-y-1 text-xs">
+                    {article.relatedArticles.map((r) => (
+                      <li key={r.id}>
+                        <Link to={`/kb/${r.id}`} className="text-accent hover:underline">
+                          {r.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={relatedIdInput}
+                    onChange={(e) => setRelatedIdInput(e.target.value.trim())}
+                    placeholder="UUID del artículo…"
+                    className="flex-1 bg-ops-850 border border-ops-600 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-accent font-mono"
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!relatedIdInput || linkRelated.isPending}
+                    onClick={() => linkRelated.mutate(relatedIdInput)}
+                  >
+                    Enlazar
+                  </Button>
+                </div>
+              </CardBody>
+            </Card>
+          )}
 
           {/* Tips */}
           <Card>

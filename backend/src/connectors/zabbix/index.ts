@@ -1,6 +1,6 @@
 import axios, { type AxiosInstance } from "axios";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 interface ZabbixResponse<T> {
@@ -21,7 +21,7 @@ export class ZabbixConnector extends BaseConnector {
   constructor() {
     super();
     this.client = axios.create({
-      baseURL: `${config.ZABBIX_URL}/api_jsonrpc.php`,
+      baseURL: `${(dyn.zabbixUrl() ?? "").replace(/\/$/, "")}/api_jsonrpc.php`,
       timeout: 12000,
       headers: { "Content-Type": "application/json" },
     });
@@ -54,14 +54,14 @@ export class ZabbixConnector extends BaseConnector {
     try {
       result = await this.call<string>(
         "user.login",
-        { username: config.ZABBIX_USER, password: config.ZABBIX_PASSWORD },
+        { username: dyn.zabbixUser(), password: dyn.zabbixPassword() },
         false,
       );
     } catch {
       // fallback for Zabbix < 5.4
       result = await this.call<string>(
         "user.login",
-        { user: config.ZABBIX_USER, password: config.ZABBIX_PASSWORD },
+        { user: dyn.zabbixUser(), password: dyn.zabbixPassword() },
         false,
       );
     }

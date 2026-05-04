@@ -1,7 +1,7 @@
 import axios from "axios";
 import https from "https";
 import { BaseConnector, type ConnectorHealth, type AlertSummary, type SystemStatus } from "../base";
-import { config } from "../../config";
+import { dyn } from "../dynamicConnectorConfig";
 import { logger } from "../../utils/logger";
 
 export class ProxmoxConnector extends BaseConnector {
@@ -14,9 +14,9 @@ export class ProxmoxConnector extends BaseConnector {
 
   private get client() {
     return axios.create({
-      baseURL: `${config.PROXMOX_URL}/api2/json`,
+      baseURL: `${(dyn.proxmoxUrl() ?? "").replace(/\/$/, "")}/api2/json`,
       timeout: 10000,
-      httpsAgent: new https.Agent({ rejectUnauthorized: config.PROXMOX_VERIFY_SSL }),
+      httpsAgent: new https.Agent({ rejectUnauthorized: dyn.proxmoxVerifySsl() }),
     });
   }
 
@@ -25,7 +25,7 @@ export class ProxmoxConnector extends BaseConnector {
       return { ticket: this.ticket, csrf: this.csrfToken! };
     }
     const { data } = await this.client.post("/access/ticket", null, {
-      params: { username: config.PROXMOX_USER, password: config.PROXMOX_PASSWORD },
+      params: { username: dyn.proxmoxUser(), password: dyn.proxmoxPassword() },
     });
     this.ticket = data.data.ticket;
     this.csrfToken = data.data.CSRFPreventionToken;

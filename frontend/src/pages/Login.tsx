@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2, AlertCircle, User, Lock, Smartphone } from "lucide-react";
 import { api, apiError } from "../lib/api";
-import { useAuthStore } from "../store/useStore";
+import { useAuthStore, usePreferencesStore } from "../store/useStore";
 import toast from "react-hot-toast";
 import type { User as UserType } from "../types";
 
@@ -21,7 +21,9 @@ function CompanyLogo({ className }: { className?: string }) {
 export default function Login() {
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
-  const [form, setForm] = useState({ username: "", password: "" });
+  const { rememberedUsername, setRememberedUsername } = usePreferencesStore();
+  const [rememberMe, setRememberMe] = useState(!!rememberedUsername);
+  const [form, setForm] = useState({ username: rememberedUsername || "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -50,6 +52,8 @@ export default function Login() {
 
       const { token, user } = data as { token: string; user: UserType };
       setAuth(user, token);
+      if (rememberMe) setRememberedUsername(form.username.trim());
+      else setRememberedUsername("");
       toast.success(`Bienvenido, ${user.displayName}`);
       navigate("/");
     } catch (err) {
@@ -69,6 +73,8 @@ export default function Login() {
         code: totpCode,
       });
       setAuth(data.user, data.token);
+      if (rememberMe) setRememberedUsername(form.username.trim());
+      else setRememberedUsername("");
       toast.success(`Bienvenido, ${data.user.displayName}`);
       navigate("/");
     } catch (err) {
@@ -265,6 +271,16 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded border-ops-600 bg-ops-900 text-accent focus:ring-accent/40"
+                />
+                Recordar usuario en este equipo
+              </label>
 
               {/* Error */}
               {error && (

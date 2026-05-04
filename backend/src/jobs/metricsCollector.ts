@@ -37,6 +37,14 @@ export async function collectMetrics(): Promise<void> {
     const systems = await registry.getAllSystems();
     const okCount = systems.filter((s) => s.status === "ok").length;
     snapshots.push({ source: "all", metricType: "systems_ok", value: okCount });
+    const okBySource = new Map<string, number>();
+    for (const s of systems) {
+      const src = (s.metadata?.source as string) ?? "unknown";
+      if (s.status === "ok") okBySource.set(src, (okBySource.get(src) ?? 0) + 1);
+    }
+    for (const [source, n] of okBySource) {
+      snapshots.push({ source, metricType: "systems_ok", value: n });
+    }
 
     // 4. Insert all snapshots
     if (snapshots.length > 0) {

@@ -3,6 +3,22 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      maxWidth: {
+        content: "min(100%, 88rem)",
+        prose: "65ch",
+      },
+      zIndex: {
+        dropdown: "50",
+        "cmd-palette": "60",
+        modal: "70",
+        toast: "80",
+        tooltip: "90",
+      },
+      boxShadow: {
+        "elev-1": "0 1px 2px rgba(0,0,0,0.35)",
+        "elev-2": "0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04)",
+        "elev-3": "0 24px 48px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05)",
+      },
       colors: {
         // Dark ops base palette
         ops: {

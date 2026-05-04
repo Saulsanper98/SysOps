@@ -78,6 +78,26 @@ async function executeJob(
   };
 
   switch (jobName) {
+    case "runbook-inline": {
+      const rb = parameters._runbook as
+        | { steps: { actionId: string; parameters?: Record<string, unknown> }[]; stepIndex?: number; runbookId?: string }
+        | undefined;
+      if (!rb?.steps?.length) throw new Error("Runbook sin pasos");
+      const parts: string[] = [];
+      for (let i = 0; i < rb.steps.length; i++) {
+        log(`── Runbook paso ${i + 1}/${rb.steps.length} ──`);
+        const [a] = await db
+          .select()
+          .from(schema.automationActions)
+          .where(eq(schema.automationActions.id, rb.steps[i].actionId))
+          .limit(1);
+        if (!a) throw new Error(`Acción no encontrada: ${rb.steps[i].actionId}`);
+        const subParams = (rb.steps[i].parameters as Record<string, unknown>) ?? {};
+        const subOut = await executeJob(a.jobName, subParams, job);
+        parts.push(subOut);
+      }
+      return parts.join("\n\n");
+    }
 
     // ── HTTP Health Check ──────────────────────────────────────────────────────
     case "health-check-http": {

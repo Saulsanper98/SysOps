@@ -31,7 +31,7 @@ docker-compose up -d
 
 # 4. Inicializar la base de datos (primera vez)
 docker-compose exec backend npm run db:push
-docker-compose exec backend npm run db:seed
+docker-compose exec backend npm run db:seed:prod
 
 # 5. Abrir en el navegador
 # Frontend: http://localhost:80
@@ -57,12 +57,19 @@ docker-compose exec backend npm run db:seed
 ```bash
 cd backend
 npm install
-cp ../.env.example ../.env  # ajusta DATABASE_URL y REDIS_URL
-npm run dev          # inicia en http://localhost:3001
-npm run db:push      # aplica esquema (primera vez)
-npm run db:seed      # carga datos demo
+cp ../.env.example ../.env  # ajusta DATABASE_URL, REDIS_URL e INGEST_WEBHOOK_SECRET (≥8 chars) si pruebas webhooks
+npm run dev          # inicia en http://localhost:3001 (o el PORT de .env)
+npm run db:setup     # db:push + db:seed (primera vez, con PostgreSQL ya levantado)
 npm test             # ejecuta tests
 ```
+
+En Windows, con PostgreSQL/Redis arriba (por ejemplo `docker compose up -d postgres redis` desde la raíz del proyecto):
+
+```powershell
+.\scripts\local-verify.ps1
+```
+
+Comprueba la conexión, aplica el esquema, ejecuta el seed y muestra un ejemplo de `POST /api/ingest/alerts` con la cabecera `X-Ingest-Secret`.
 
 ### Frontend
 ```bash
